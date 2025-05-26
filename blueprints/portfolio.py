@@ -1,5 +1,5 @@
-from flask import Blueprint, render_template, request
-from datetime import datetime, timedelta
+from flask import Blueprint, render_template
+
 from services.portfolio_service import PortfolioService
 from utils.decorators import login_required
 

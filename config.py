@@ -16,6 +16,21 @@ class Config:
     UPSTOX_API_SECRET = os.environ.get('UPSTOX_API_SECRET')
     UPSTOX_REDIRECT_URI = os.environ.get('UPSTOX_REDIRECT_URI')
 
+    # API URLs
+    UPSTOX_AUTH_URL = f"https://api.upstox.com/v2/login/authorization/dialog"
+    UPSTOX_TOKEN_URL = "https://api.upstox.com/v2/login/authorization/token"
+    UPSTOX_HOLDINGS_URL = "https://api.upstox.com/v2/portfolio/long-term-holdings"
+    UPSTOX_HISTORICAL_URL = "https://api.upstox.com/v3/historical-candle"
+
+    # Benchmark configuration
+    BENCHMARK_SYMBOL = 'NSE_INDEX|Nifty 50'
+
+    # Default date range
+    DEFAULT_ANALYSIS_DAYS = 30
+
+    # Cache settings
+    CACHE_TIMEOUT = timedelta(minutes=15)
+
     # Validate required environment variables
     if not UPSTOX_API_KEY:
         raise ValueError("UPSTOX_API_KEY environment variable is required")
@@ -49,18 +64,3 @@ config = {
     'testing': TestingConfig,
     'default': DevelopmentConfig
 }
-
-# API URLs
-UPSTOX_AUTH_URL = f"https://api.upstox.com/v2/login/authorization/dialog"
-UPSTOX_TOKEN_URL = "https://api.upstox.com/v2/login/authorization/token"
-UPSTOX_HOLDINGS_URL = "https://api.upstox.com/v2/portfolio/long-term-holdings"
-UPSTOX_HISTORICAL_URL = "https://api.upstox.com/v3/historical-candle"
-
-# Benchmark configuration
-BENCHMARK_SYMBOL = 'NSE_INDEX|Nifty 50'
-
-# Default date range
-DEFAULT_ANALYSIS_DAYS = 30
-
-# Cache settings
-CACHE_TIMEOUT = timedelta(minutes=15)

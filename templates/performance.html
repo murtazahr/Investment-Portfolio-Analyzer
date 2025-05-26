@@ -27,14 +27,10 @@
             <i class="fas fa-sync me-1"></i>Update
           </button>
           <div class="btn-group">
-            <a href="{{ url_for('portfolio', start=(end_date - timedelta(days=30)).strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d')) }}"
-               class="btn btn-outline-custom btn-sm">1M</a>
-            <a href="{{ url_for('portfolio', start=(end_date - timedelta(days=90)).strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d')) }}"
-               class="btn btn-outline-custom btn-sm">3M</a>
-            <a href="{{ url_for('portfolio', start=(end_date - timedelta(days=180)).strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d')) }}"
-               class="btn btn-outline-custom btn-sm">6M</a>
-            <a href="{{ url_for('portfolio', start=(end_date - timedelta(days=365)).strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d')) }}"
-               class="btn btn-outline-custom btn-sm">1Y</a>
+            {% for period, (preset_start, preset_end) in date_presets.items() %}
+            <a href="{{ url_for('portfolio', start=preset_start.strftime('%Y-%m-%d'), end=preset_end.strftime('%Y-%m-%d')) }}"
+               class="btn btn-outline-custom btn-sm">{{ period }}</a>
+            {% endfor %}
           </div>
         </div>
       </div>
@@ -50,13 +46,13 @@
           <div class="col-6">
             <div class="metric-label text-white-50">Total Return</div>
             <div class="metric-value">
-              {{ "%.2f"|format(portfolio_metrics.total_return * 100) }}%
+              {{ format_percentage(portfolio_metrics.total_return * 100) }}
             </div>
           </div>
           <div class="col-6">
             <div class="metric-label text-white-50">Volatility</div>
             <div class="metric-value">
-              {{ "%.1f"|format(portfolio_metrics.volatility * 100) }}%
+              {{ format_percentage(portfolio_metrics.volatility * 100) }}
             </div>
           </div>
           <div class="col-6 mt-2">
@@ -68,7 +64,7 @@
           <div class="col-6 mt-2">
             <div class="metric-label text-white-50">Max Drawdown</div>
             <div class="metric-value">
-              {{ "%.1f"|format(portfolio_metrics.max_drawdown * 100) }}%
+              {{ format_percentage(portfolio_metrics.max_drawdown * 100) }}
             </div>
           </div>
         </div>
@@ -88,13 +84,13 @@
           <div class="col-6">
             <div class="metric-label text-white-50">Total Return</div>
             <div class="metric-value">
-              {{ "%.2f"|format(benchmark_metrics.total_return * 100) }}%
+              {{ format_percentage(benchmark_metrics.total_return * 100) }}
             </div>
           </div>
           <div class="col-6">
             <div class="metric-label text-white-50">Volatility</div>
             <div class="metric-value">
-              {{ "%.1f"|format(benchmark_metrics.volatility * 100) }}%
+              {{ format_percentage(benchmark_metrics.volatility * 100) }}
             </div>
           </div>
           <div class="col-6 mt-2">
@@ -106,7 +102,7 @@
           <div class="col-6 mt-2">
             <div class="metric-label text-white-50">Max Drawdown</div>
             <div class="metric-value">
-              {{ "%.1f"|format(benchmark_metrics.max_drawdown * 100) }}%
+              {{ format_percentage(benchmark_metrics.max_drawdown * 100) }}
             </div>
           </div>
           {% else %}

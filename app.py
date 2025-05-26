@@ -1,21 +1,44 @@
+# app.py - Alternative simpler approach
 from flask import Flask, render_template, redirect, url_for, request, session
 from datetime import datetime, timedelta
 import plotly.graph_objs as go
 import plotly.io as pio
+import os
 
-from config import Config
+from config import config
 from services.auth_service import AuthService
 from services.portfolio_service import PortfolioService
 from utils.decorators import login_required
 
-def create_app():
+def create_app(config_name=None):
     """Application factory pattern"""
     app = Flask(__name__)
-    app.config.from_object(Config)
+
+    # Load configuration
+    if config_name is None:
+        config_name = os.environ.get('FLASK_ENV', 'development')
+
+    app.config.from_object(config[config_name])
 
     # Initialize services
     auth_service = AuthService()
     portfolio_service = PortfolioService()
+
+    # Add utility functions to Jinja2 globals
+    @app.template_global()
+    def get_date_offset(base_date, days):
+        """Calculate date offset for templates"""
+        return (base_date - timedelta(days=days)).strftime('%Y-%m-%d')
+
+    @app.template_global()
+    def format_currency(value):
+        """Format currency for templates"""
+        return f"₹{value:,.0f}"
+
+    @app.template_global()
+    def format_percentage(value):
+        """Format percentage for templates"""
+        return f"{value:.1f}%"
 
     @app.route('/')
     def home():
@@ -54,11 +77,9 @@ def create_app():
         """Portfolio summary page"""
         try:
             portfolio_summary = portfolio_service.get_portfolio_summary()
-            return render_template('summary.html',
-                                   portfolio=portfolio_summary,
-                                   format_currency=lambda x: f"₹{x:,.0f}",
-                                   format_percentage=lambda x: f"{x:.1f}%")
+            return render_template('summary.html', portfolio=portfolio_summary)
         except Exception as e:
+            app.logger.error(f"Error in summary route: {str(e)}")
             return f"Error loading portfolio: {str(e)}", 500
 
     @app.route('/portfolio')
@@ -95,24 +116,40 @@ def create_app():
             # Create visualization
             chart_html = _create_performance_chart(portfolio_metrics, benchmark_metrics)
 
+            # Calculate preset date ranges for quick selection
+            today = end_date
+            date_presets = {
+                '1M': (today - timedelta(days=30), today),
+                '3M': (today - timedelta(days=90), today),
+                '6M': (today - timedelta(days=180), today),
+                '1Y': (today - timedelta(days=365), today)
+            }
+
             return render_template('performance.html',
                                    portfolio_metrics=portfolio_metrics,
                                    benchmark_metrics=benchmark_metrics,
                                    chart_html=chart_html,
                                    start_date=start_date,
-                                   end_date=end_date)
+                                   end_date=end_date,
+                                   date_presets=date_presets)
 
         except ValueError as e:
+            app.logger.error(f"Date validation error: {str(e)}")
             return f"Invalid date format: {str(e)}", 400
         except Exception as e:
+            app.logger.error(f"Error in portfolio route: {str(e)}")
             return f"Error loading performance data: {str(e)}", 500
 
     @app.route('/refresh', methods=['POST'])
     @login_required
     def refresh():
         """Refresh portfolio cache"""
-        portfolio_service.refresh_cache()
-        return redirect(url_for('summary'))
+        try:
+            portfolio_service.refresh_cache()
+            return redirect(url_for('summary'))
+        except Exception as e:
+            app.logger.error(f"Error refreshing cache: {str(e)}")
+            return f"Error refreshing data: {str(e)}", 500
 
     def _create_performance_chart(portfolio_metrics, benchmark_metrics):
         """Create performance comparison chart"""
@@ -163,4 +200,3 @@ def create_app():
 if __name__ == '__main__':
     app = create_app()
     app.run(debug=True)
-    
