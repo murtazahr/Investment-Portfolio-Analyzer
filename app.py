@@ -75,23 +75,49 @@ def create_app(config_name=None):
     @app.route('/summary')
     @login_required
     def summary():
-        """Portfolio summary page with enhanced visualizations"""
+        """Portfolio summary page with enhanced visualizations and day change"""
         try:
             portfolio_summary = portfolio_service.get_portfolio_summary()
 
-            # Create enhanced visualizations like in the original
-            pie_html, bar_html = _create_summary_charts(portfolio_summary)
+            # Check if we have valid data
+            if not portfolio_summary or not portfolio_summary.holdings:
+                return render_template('no_data.html',
+                                       start_date=datetime.now().date(),
+                                       end_date=datetime.now().date(),
+                                       message="No portfolio holdings found. Please check your Upstox connection.")
+
+            # Create enhanced visualizations including day change
+            pie_html, bar_html, day_change_html = _create_summary_charts(portfolio_summary)
 
             return render_template('summary.html',
                                    portfolio=portfolio_summary,
                                    pie_html=pie_html,
-                                   bar_html=bar_html)
+                                   bar_html=bar_html,
+                                   day_change_html=day_change_html)
         except Exception as e:
             app.logger.error(f"Error in summary route: {str(e)}")
-            return f"Error loading portfolio: {str(e)}", 500
+            return render_template('no_data.html',
+                                   start_date=datetime.now().date(),
+                                   end_date=datetime.now().date(),
+                                   message=f"Error loading portfolio: {str(e)}")
 
     def _create_summary_charts(portfolio_summary):
-        """Create enhanced visualizations for portfolio summary"""
+        """Create enhanced visualizations for portfolio summary including day change"""
+
+        # Check if we have holdings
+        if not portfolio_summary.holdings:
+            # Return empty charts
+            empty_fig = go.Figure()
+            empty_fig.update_layout(
+                title="No data available",
+                height=400,
+                annotations=[dict(text="No holdings data available",
+                                  showarrow=False,
+                                  x=0.5, y=0.5,
+                                  xref="paper", yref="paper")]
+            )
+            empty_html = pio.to_html(empty_fig, full_html=False)
+            return empty_html, empty_html, empty_html
 
         # Enhanced colors matching original
         colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7']
@@ -124,7 +150,7 @@ def create_app(config_name=None):
             margin=dict(t=40, b=20, l=20, r=120)
         )
 
-        # Enhanced bar chart with conditional coloring
+        # Enhanced bar chart with conditional coloring for overall returns
         return_percentages = [holding.return_percentage for holding in portfolio_summary.holdings]
         symbols = [holding.tradingsymbol for holding in portfolio_summary.holdings]
 
@@ -149,11 +175,35 @@ def create_app(config_name=None):
         )
         bar_fig.update_yaxes(gridcolor='rgba(0,0,0,0.1)')
 
+        # New day change chart
+        day_change_percentages = [getattr(holding, 'day_change_percentage', 0) for holding in portfolio_summary.holdings]
+        day_change_fig = go.Figure([go.Bar(
+            x=symbols,
+            y=day_change_percentages,
+            marker_color=[('#28a745' if val >= 0 else '#dc3545') for val in day_change_percentages],
+            hovertemplate='<b>%{x}</b><br>Day Change: %{y:.1f}%<extra></extra>',
+            text=[f"{val:.1f}%" for val in day_change_percentages],
+            textposition='outside'
+        )])
+
+        day_change_fig.update_layout(
+            title_text='Today\'s Performance by Stock',
+            yaxis_title='Day Change (%)',
+            xaxis_title='Stock',
+            height=400,
+            font=dict(size=12),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            margin=dict(t=40, b=60, l=60, r=20)
+        )
+        day_change_fig.update_yaxes(gridcolor='rgba(0,0,0,0.1)')
+
         # Convert to HTML
         pie_html = pio.to_html(pie_fig, full_html=False)
         bar_html = pio.to_html(bar_fig, full_html=False)
+        day_change_html = pio.to_html(day_change_fig, full_html=False)
 
-        return pie_html, bar_html
+        return pie_html, bar_html, day_change_html
 
     @app.route('/portfolio')
     @login_required

@@ -40,7 +40,7 @@ portfolio_dashboard/
 │   └── css/
 │       └── style.css          # Custom styles
 └── tests/
-    ├── test_portfolio_service.py
+    ├── test_auth_service.py
     └── test_calculations.py
 ```
 

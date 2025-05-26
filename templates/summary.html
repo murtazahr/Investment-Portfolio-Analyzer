@@ -8,7 +8,7 @@
 
   <!-- Key Metrics -->
   <div class="row mb-4">
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
       <div class="card metrics-card h-100">
         <div class="card-body text-center">
           <div class="metric-label">Total Portfolio Value</div>
@@ -16,7 +16,7 @@
         </div>
       </div>
     </div>
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
       <div class="card metrics-card h-100">
         <div class="card-body text-center">
           <div class="metric-label">Total Investment</div>
@@ -24,7 +24,7 @@
         </div>
       </div>
     </div>
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
       <div class="card metrics-card h-100">
         <div class="card-body text-center">
           <div class="metric-label">Total P&L</div>
@@ -34,6 +34,77 @@
           <small class="{% if portfolio.total_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
             ({{ format_percentage(portfolio.total_return_percentage) }})
           </small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card metrics-card h-100">
+        <div class="card-body text-center">
+          <div class="metric-label">Today's Change</div>
+          <div class="metric-value {% if portfolio.total_day_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+            {{ format_currency(portfolio.total_day_pnl) }}
+          </div>
+          <small class="{% if portfolio.total_day_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+            ({{ format_percentage(portfolio.total_day_change_percentage) }})
+          </small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Day Change Summary Section -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card metrics-card">
+        <div class="card-body">
+          <h5 class="card-title">
+            <i class="fas fa-clock me-2"></i>Today's Performance Summary
+          </h5>
+          <div class="row text-center">
+            <div class="col-md-4">
+              <div class="d-flex align-items-center justify-content-center">
+                {% if portfolio.total_day_pnl >= 0 %}
+                <i class="fas fa-arrow-up text-success me-2"></i>
+                {% else %}
+                <i class="fas fa-arrow-down text-danger me-2"></i>
+                {% endif %}
+                <div>
+                  <div class="fw-bold {% if portfolio.total_day_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+                    {{ format_currency(portfolio.total_day_pnl) }}
+                  </div>
+                  <small class="text-muted">Day P&L</small>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="d-flex align-items-center justify-content-center">
+                {% if portfolio.total_day_change_percentage >= 0 %}
+                <i class="fas fa-percent text-success me-2"></i>
+                {% else %}
+                <i class="fas fa-percent text-danger me-2"></i>
+                {% endif %}
+                <div>
+                  <div class="fw-bold {% if portfolio.total_day_change_percentage >= 0 %}text-success{% else %}text-danger{% endif %}">
+                    {{ format_percentage(portfolio.total_day_change_percentage) }}
+                  </div>
+                  <small class="text-muted">Day Change %</small>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="d-flex align-items-center justify-content-center">
+                {% set gainers = portfolio.holdings | selectattr('day_pnl', '>', 0) | list | length %}
+                {% set losers = portfolio.holdings | selectattr('day_pnl', '<', 0) | list | length %}
+                <i class="fas fa-chart-bar text-primary me-2"></i>
+                <div>
+                  <div class="fw-bold text-primary">
+                    {{ gainers }} / {{ losers }}
+                  </div>
+                  <small class="text-muted">Gainers / Losers</small>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -59,6 +130,18 @@
     </div>
   </div>
 
+  <!-- Day Change Chart -->
+  <div class="row">
+    <div class="col-12">
+      <div class="chart-container">
+        <h5 class="text-center mb-3">
+          <i class="fas fa-calendar-day me-2"></i>Today's Performance by Stock
+        </h5>
+        {{ day_change_html|safe }}
+      </div>
+    </div>
+  </div>
+
   <!-- Detailed Holdings Table -->
   <div class="table-container">
     <h5 class="p-3 mb-0">
@@ -76,6 +159,8 @@
           <th>Investment</th>
           <th>P&L</th>
           <th>Return %</th>
+          <th>Day Change</th>
+          <th>Day P&L</th>
           <th>Allocation %</th>
         </tr>
         </thead>
@@ -85,7 +170,15 @@
           <td><strong>{{ holding.tradingsymbol }}</strong></td>
           <td>{{ holding.quantity }}</td>
           <td>₹{{ "%.2f"|format(holding.average_price) }}</td>
-          <td>₹{{ "%.2f"|format(holding.last_price) }}</td>
+          <td>
+            ₹{{ "%.2f"|format(holding.last_price) }}
+            {% if holding.day_change != 0 %}
+            <br>
+            <small class="{% if holding.day_change >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {% if holding.day_change >= 0 %}+{% endif %}₹{{ "%.2f"|format(holding.day_change) }}
+            </small>
+            {% endif %}
+          </td>
           <td>{{ format_currency(holding.current_value) }}</td>
           <td>{{ format_currency(holding.investment) }}</td>
           <td class="{% if holding.pnl >= 0 %}positive{% else %}negative{% endif %}">
@@ -93,6 +186,12 @@
           </td>
           <td class="{% if holding.return_percentage >= 0 %}positive{% else %}negative{% endif %}">
             {{ format_percentage(holding.return_percentage) }}
+          </td>
+          <td class="{% if holding.day_change_percentage >= 0 %}positive{% else %}negative{% endif %}">
+            {% if holding.day_change_percentage >= 0 %}+{% endif %}{{ format_percentage(holding.day_change_percentage) }}
+          </td>
+          <td class="{% if holding.day_pnl >= 0 %}positive{% else %}negative{% endif %}">
+            {% if holding.day_pnl >= 0 %}+{% endif %}{{ format_currency(holding.day_pnl) }}
           </td>
           <td>{{ format_percentage(holding.allocation_percentage) }}</td>
         </tr>

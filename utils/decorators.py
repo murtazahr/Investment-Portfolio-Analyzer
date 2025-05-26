@@ -1,12 +1,14 @@
 from functools import wraps
+
 from flask import redirect, url_for, session
+
 
 def login_required(f):
     """Decorator to require authentication"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('access_token'):
-            return redirect(url_for('auth.login'))
+            return redirect(url_for('login'))  # Updated to match app.py route
         return f(*args, **kwargs)
     return decorated_function
 

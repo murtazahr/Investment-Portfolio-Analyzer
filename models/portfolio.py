@@ -16,6 +16,9 @@ class Holding:
     investment: float = 0
     return_percentage: float = 0
     allocation_percentage: float = 0
+    day_change: float = 0  # Added for 1-day price change
+    day_change_percentage: float = 0  # Added for 1-day percentage change
+    day_pnl: float = 0  # Added for 1-day P&L impact
 
 @dataclass
 class PortfolioSummary:
@@ -25,6 +28,9 @@ class PortfolioSummary:
     total_pnl: float
     total_return_percentage: float
     holdings: List[Holding]
+    total_day_change: float = 0  # Added for total 1-day change
+    total_day_change_percentage: float = 0  # Added for total 1-day percentage change
+    total_day_pnl: float = 0  # Added for total 1-day P&L impact
 
 @dataclass
 class PerformanceMetrics:
@@ -34,4 +40,3 @@ class PerformanceMetrics:
     max_drawdown: float
     total_return: float
     cumulative_returns: pd.Series
-    

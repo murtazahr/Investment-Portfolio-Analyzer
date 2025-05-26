@@ -21,20 +21,52 @@ class PortfolioService:
         return datetime.now() - self._cache_timestamp < timedelta(minutes=15)
 
     def get_portfolio_summary(self) -> PortfolioSummary:
-        """Get comprehensive portfolio summary"""
-        holdings = self._get_cached_holdings()
+        """Get comprehensive portfolio summary with day change data"""
+        holdings = self._get_cached_holdings_with_day_change()
+
+        # Handle empty holdings or error case
+        if not holdings:
+            return PortfolioSummary(
+                total_value=0,
+                total_investment=0,
+                total_pnl=0,
+                total_return_percentage=0,
+                holdings=[],
+                total_day_change=0,
+                total_day_change_percentage=0,
+                total_day_pnl=0
+            )
 
         # Convert to DataFrame for calculations
         holdings_data = []
         for holding in holdings:
+            # Ensure we have Holding objects, not dicts
+            if isinstance(holding, dict):
+                continue  # Skip invalid entries
+
             holdings_data.append({
                 'tradingsymbol': holding.tradingsymbol,
                 'quantity': holding.quantity,
                 'average_price': holding.average_price,
                 'last_price': holding.last_price,
                 'pnl': holding.pnl,
-                'close_price': holding.close_price
+                'close_price': holding.close_price,
+                'day_change': getattr(holding, 'day_change', 0),
+                'day_change_percentage': getattr(holding, 'day_change_percentage', 0),
+                'day_pnl': getattr(holding, 'day_pnl', 0)
             })
+
+        if not holdings_data:
+            return PortfolioSummary(
+                total_value=0,
+                total_investment=0,
+                total_pnl=0,
+                total_return_percentage=0,
+                holdings=[],
+                total_day_change=0,
+                total_day_change_percentage=0,
+                total_day_pnl=0
+            )
 
         df = pd.DataFrame(holdings_data)
 
@@ -42,34 +74,64 @@ class PortfolioService:
         df = self.calculator.calculate_portfolio_value(df)
 
         # Update holding objects with calculated values
+        valid_holdings = []
         for i, holding in enumerate(holdings):
-            holding.current_value = df.iloc[i]['current_value']
-            holding.investment = df.iloc[i]['investment']
-            holding.return_percentage = df.iloc[i]['return_%']
-            holding.allocation_percentage = df.iloc[i]['allocation_%']
+            if isinstance(holding, dict):
+                continue  # Skip invalid entries
+
+            if i < len(df):
+                holding.current_value = df.iloc[i]['current_value']
+                holding.investment = df.iloc[i]['investment']
+                holding.return_percentage = df.iloc[i]['return_%']
+                holding.allocation_percentage = df.iloc[i]['allocation_%']
+                # Day change values should already be set from the API
+                if not hasattr(holding, 'day_change'):
+                    holding.day_change = 0
+                if not hasattr(holding, 'day_change_percentage'):
+                    holding.day_change_percentage = 0
+                if not hasattr(holding, 'day_pnl'):
+                    holding.day_pnl = 0
+
+                valid_holdings.append(holding)
 
         total_value = df['current_value'].sum()
         total_investment = df['investment'].sum()
         total_pnl = df['pnl'].sum()
         total_return_percentage = ((total_pnl / total_investment) * 100) if total_investment > 0 else 0
 
+        # Calculate total day change metrics
+        total_day_pnl = df['day_pnl'].sum()
+        total_day_change_percentage = (total_day_pnl / total_value) * 100 if total_value > 0 else 0
+        total_day_change = df['day_change'].sum()  # This is less meaningful but included for completeness
+
         return PortfolioSummary(
             total_value=total_value,
             total_investment=total_investment,
             total_pnl=total_pnl,
             total_return_percentage=total_return_percentage,
-            holdings=holdings
+            holdings=valid_holdings,
+            total_day_change=total_day_change,
+            total_day_change_percentage=total_day_change_percentage,
+            total_day_pnl=total_day_pnl
         )
 
     def get_performance_analysis(self, start_date: datetime, end_date: datetime) -> Tuple[Optional[PerformanceMetrics], Optional[PerformanceMetrics], pd.DataFrame]:
         """Get portfolio performance analysis with benchmark comparison"""
         holdings = self._get_cached_holdings()
 
+        # Handle case where holdings might be empty or contain errors
+        if not holdings:
+            return None, None, pd.DataFrame()
+
         # Build portfolio returns DataFrame
         returns_df = pd.DataFrame()
 
         for holding in holdings:
-            if not holding.instrument_token:
+            # Skip if holding is a dict (error case) or missing instrument_token
+            if isinstance(holding, dict):
+                continue
+
+            if not hasattr(holding, 'instrument_token') or not holding.instrument_token:
                 continue
 
             hist_data = self.upstox_service.get_historical_data(
@@ -118,12 +180,43 @@ class PortfolioService:
         return portfolio_metrics, benchmark_metrics, returns_df
 
     def _get_cached_holdings(self) -> List[Holding]:
-        """Get holdings with caching"""
+        """Get holdings with caching (without day change data)"""
         if not self._is_cache_valid():
             self._holdings_cache = self.upstox_service.get_holdings()
             self._cache_timestamp = datetime.now()
 
         return self._holdings_cache
+
+    def _get_cached_holdings_with_day_change(self) -> List[Holding]:
+        """Get holdings with day change data and caching"""
+        if not self._is_cache_valid():
+            try:
+                print("Cache invalid, fetching fresh holdings with day change...")
+                self._holdings_cache = self.upstox_service.get_holdings_with_day_change()
+                self._cache_timestamp = datetime.now()
+                print(f"Cached {len(self._holdings_cache)} holdings")
+            except Exception as e:
+                print(f"Error fetching holdings with day change: {str(e)}")
+                # Fallback to regular holdings without day change
+                try:
+                    print("Falling back to regular holdings...")
+                    holdings = self.upstox_service.get_holdings()
+                    # Add default day change values
+                    for holding in holdings:
+                        if hasattr(holding, 'tradingsymbol'):  # Ensure it's a valid Holding object
+                            holding.day_change = 0
+                            holding.day_change_percentage = 0
+                            holding.day_pnl = 0
+                    self._holdings_cache = holdings
+                    self._cache_timestamp = datetime.now()
+                    print(f"Fallback successful, cached {len(self._holdings_cache)} holdings")
+                except Exception as e2:
+                    print(f"Error fetching regular holdings: {str(e2)}")
+                    self._holdings_cache = []
+        else:
+            print(f"Using cached holdings: {len(self._holdings_cache or [])} items")
+
+        return self._holdings_cache or []
 
     def refresh_cache(self):
         """Force refresh of holdings cache"""
