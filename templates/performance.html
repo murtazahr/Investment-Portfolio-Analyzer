@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container my-4">
+  <h2 class="mb-4 text-center">
+    <i class="fas fa-chart-area me-2"></i>Portfolio Performance Analysis
+  </h2>
+
+  <!-- Date Selection Form -->
+  <div class="date-form mb-4">
+    <form method="GET" action="{{ url_for('portfolio') }}">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label fw-semibold">
+            <i class="fas fa-calendar-alt me-1"></i>Start Date
+          </label>
+          <input type="date" name="start" value="{{ start_date.strftime('%Y-%m-%d') }}" class="form-control">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-semibold">
+            <i class="fas fa-calendar-alt me-1"></i>End Date
+          </label>
+          <input type="date" name="end" value="{{ end_date.strftime('%Y-%m-%d') }}" class="form-control">
+        </div>
+        <div class="col-md-6">
+          <button type="submit" class="btn btn-custom me-2">
+            <i class="fas fa-sync me-1"></i>Update
+          </button>
+          <div class="btn-group">
+            <a href="{{ url_for('portfolio', start=(end_date - timedelta(days=30)).strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d')) }}"
+               class="btn btn-outline-custom btn-sm">1M</a>
+            <a href="{{ url_for('portfolio', start=(end_date - timedelta(days=90)).strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d')) }}"
+               class="btn btn-outline-custom btn-sm">3M</a>
+            <a href="{{ url_for('portfolio', start=(end_date - timedelta(days=180)).strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d')) }}"
+               class="btn btn-outline-custom btn-sm">6M</a>
+            <a href="{{ url_for('portfolio', start=(end_date - timedelta(days=365)).strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d')) }}"
+               class="btn btn-outline-custom btn-sm">1Y</a>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Performance Comparison Section -->
+  <div class="comparison-section">
+    <div class="row text-center">
+      <div class="col-md-5">
+        <h5><i class="fas fa-user me-2"></i>Your Portfolio</h5>
+        <div class="row mt-3">
+          <div class="col-6">
+            <div class="metric-label text-white-50">Total Return</div>
+            <div class="metric-value">
+              {{ "%.2f"|format(portfolio_metrics.total_return * 100) }}%
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="metric-label text-white-50">Volatility</div>
+            <div class="metric-value">
+              {{ "%.1f"|format(portfolio_metrics.volatility * 100) }}%
+            </div>
+          </div>
+          <div class="col-6 mt-2">
+            <div class="metric-label text-white-50">Sharpe Ratio</div>
+            <div class="metric-value">
+              {{ "%.2f"|format(portfolio_metrics.sharpe_ratio) }}
+            </div>
+          </div>
+          <div class="col-6 mt-2">
+            <div class="metric-label text-white-50">Max Drawdown</div>
+            <div class="metric-value">
+              {{ "%.1f"|format(portfolio_metrics.max_drawdown * 100) }}%
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-2 d-flex align-items-center justify-content-center">
+        <div class="vs-badge">
+          <i class="fas fa-balance-scale fa-2x"></i>
+          <div class="mt-2">VS</div>
+        </div>
+      </div>
+
+      <div class="col-md-5">
+        <h5><i class="fas fa-chart-line me-2"></i>Nifty 50 Benchmark</h5>
+        <div class="row mt-3">
+          {% if benchmark_metrics %}
+          <div class="col-6">
+            <div class="metric-label text-white-50">Total Return</div>
+            <div class="metric-value">
+              {{ "%.2f"|format(benchmark_metrics.total_return * 100) }}%
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="metric-label text-white-50">Volatility</div>
+            <div class="metric-value">
+              {{ "%.1f"|format(benchmark_metrics.volatility * 100) }}%
+            </div>
+          </div>
+          <div class="col-6 mt-2">
+            <div class="metric-label text-white-50">Sharpe Ratio</div>
+            <div class="metric-value">
+              {{ "%.2f"|format(benchmark_metrics.sharpe_ratio) }}
+            </div>
+          </div>
+          <div class="col-6 mt-2">
+            <div class="metric-label text-white-50">Max Drawdown</div>
+            <div class="metric-value">
+              {{ "%.1f"|format(benchmark_metrics.max_drawdown * 100) }}%
+            </div>
+          </div>
+          {% else %}
+          <div class="text-white-50 mt-3">
+            <i class="fas fa-exclamation-triangle me-1"></i>Benchmark data unavailable
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Help Section -->
+    <div class="help-tooltip">
+      <h6><i class="fas fa-info-circle me-2"></i>How to Read This Chart:</h6>
+      <ul class="mb-0">
+        <li><strong>Y-axis shows cumulative returns (%)</strong> - Total percentage gain/loss since start date</li>
+        <li><strong>Total Return:</strong> Overall performance for the selected period</li>
+        <li><strong>Volatility:</strong> Annual price fluctuation (lower = more stable)</li>
+        <li><strong>Sharpe Ratio:</strong> Risk-adjusted returns (higher = better risk/reward)</li>
+        <li><strong>Max Drawdown:</strong> Largest peak-to-trough decline (lower = better)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Main Chart -->
+  <div class="chart-container">
+    <h5 class="text-center mb-3">
+      <i class="fas fa-chart-area me-2"></i>Cumulative Returns Comparison
+    </h5>
+    {{ chart_html|safe }}
+  </div>
+
+  <!-- Navigation -->
+  <div class="text-center mt-4">
+    <a href="{{ url_for('home') }}" class="btn btn-outline-secondary me-2">
+      <i class="fas fa-home me-1"></i>Dashboard
+    </a>
+    <a href="{{ url_for('summary') }}" class="btn btn-custom me-2">
+      <i class="fas fa-list me-1"></i>Holdings Summary
+    </a>
+    <form action="{{ url_for('refresh') }}" method="post" style="display: inline-block;">
+      <button type="submit" class="btn btn-outline-danger">
+        <i class="fas fa-sync-alt me-1"></i>Refresh Data
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

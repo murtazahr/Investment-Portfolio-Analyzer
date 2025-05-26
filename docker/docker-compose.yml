@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  portfolio-dashboard:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - UPSTOX_API_KEY=${UPSTOX_API_KEY}
+      - UPSTOX_API_SECRET=${UPSTOX_API_SECRET}
+      - UPSTOX_REDIRECT_URI=${UPSTOX_REDIRECT_URI}
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"

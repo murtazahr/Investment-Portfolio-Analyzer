@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block navbar %}{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+  <div class="hero-card">
+    <i class="fas fa-chart-line fa-4x text-primary mb-4"></i>
+    <h1 class="display-4 mb-3">Portfolio Dashboard</h1>
+    <p class="lead mb-4">Connect your Upstox account to analyze your investment performance</p>
+    <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg">
+      <i class="fas fa-sign-in-alt me-2"></i>Connect with Upstox
+    </a>
+  </div>
+</div>
+{% endblock %}

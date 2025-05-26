@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container my-4">
+  <h2 class="mb-4 text-center">
+    <i class="fas fa-pie-chart me-2"></i>Portfolio Summary
+  </h2>
+
+  <!-- Key Metrics -->
+  <div class="row mb-4">
+    <div class="col-md-4 mb-3">
+      <div class="card metrics-card h-100">
+        <div class="card-body text-center">
+          <div class="metric-label">Total Portfolio Value</div>
+          <div class="metric-value text-primary">{{ format_currency(portfolio.total_value) }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="card metrics-card h-100">
+        <div class="card-body text-center">
+          <div class="metric-label">Total Investment</div>
+          <div class="metric-value text-info">{{ format_currency(portfolio.total_investment) }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="card metrics-card h-100">
+        <div class="card-body text-center">
+          <div class="metric-label">Total P&L</div>
+          <div class="metric-value {% if portfolio.total_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+            {{ format_currency(portfolio.total_pnl) }}
+          </div>
+          <small class="{% if portfolio.total_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+            ({{ format_percentage(portfolio.total_return_percentage) }})
+          </small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Holdings Table -->
+  <div class="table-container">
+    <h5 class="p-3 mb-0">
+      <i class="fas fa-table me-2"></i>Detailed Holdings
+    </h5>
+    <div class="table-responsive">
+      <table class="table table-hover">
+        <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Quantity</th>
+          <th>Avg Price</th>
+          <th>Current Price</th>
+          <th>Current Value</th>
+          <th>Investment</th>
+          <th>P&L</th>
+          <th>Return %</th>
+          <th>Allocation %</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for holding in portfolio.holdings %}
+        <tr>
+          <td><strong>{{ holding.tradingsymbol }}</strong></td>
+          <td>{{ holding.quantity }}</td>
+          <td>₹{{ "%.2f"|format(holding.average_price) }}</td>
+          <td>₹{{ "%.2f"|format(holding.last_price) }}</td>
+          <td>{{ format_currency(holding.current_value) }}</td>
+          <td>{{ format_currency(holding.investment) }}</td>
+          <td class="{% if holding.pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+            {{ format_currency(holding.pnl) }}
+          </td>
+          <td class="{% if holding.return_percentage >= 0 %}text-success{% else %}text-danger{% endif %}">
+            {{ format_percentage(holding.return_percentage) }}
+          </td>
+          <td>{{ format_percentage(holding.allocation_percentage) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="text-center mt-4">
+    <a href="{{ url_for('portfolio') }}" class="btn btn-custom me-3">
+      <i class="fas fa-chart-area me-2"></i>Performance Analysis
+    </a>
+    <form action="{{ url_for('refresh') }}" method="post" style="display: inline-block;">
+      <button type="submit" class="btn btn-outline-secondary">
+        <i class="fas fa-sync-alt me-2"></i>Refresh Data
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

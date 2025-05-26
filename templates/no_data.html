@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container my-5">
+  <div class="alert alert-warning">
+    <h4><i class="fas fa-exclamation-triangle me-2"></i>No Historical Data Found</h4>
+    <p>Possible reasons:</p>
+    <ul>
+      <li>New holdings with no trading history</li>
+      <li>Market holidays in selected date range</li>
+      <li>Insufficient data permissions (check Upstox API access)</li>
+    </ul>
+    <p>Debug info:</p>
+    <ul>
+      <li>Date range: {{ start_date }} to {{ end_date }}</li>
+    </ul>
+    <a href="{{ url_for('home') }}" class="btn btn-secondary">Back to Dashboard</a>
+  </div>
+</div>
+{% endblock %}

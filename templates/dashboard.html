@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container my-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6 mb-4">
+      <div class="card dashboard-card h-100">
+        <div class="card-body text-center p-4">
+          <div class="card-icon performance-icon">
+            <i class="fas fa-chart-area"></i>
+          </div>
+          <h4 class="card-title">Performance Analysis</h4>
+          <p class="card-text text-muted">Analyze cumulative returns, volatility, and compare against Nifty 50 benchmark</p>
+          <a href="{{ url_for('portfolio') }}" class="btn btn-primary">
+            <i class="fas fa-chart-line me-2"></i>View Performance
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 mb-4">
+      <div class="card dashboard-card h-100">
+        <div class="card-body text-center p-4">
+          <div class="card-icon holdings-icon">
+            <i class="fas fa-pie-chart"></i>
+          </div>
+          <h4 class="card-title">Holdings Summary</h4>
+          <p class="card-text text-muted">View asset allocation, individual stock performance, and detailed portfolio breakdown</p>
+          <a href="{{ url_for('summary') }}" class="btn btn-primary">
+            <i class="fas fa-list me-2"></i>View Holdings
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
