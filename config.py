@@ -17,10 +17,12 @@ class Config:
     UPSTOX_REDIRECT_URI = os.environ.get('UPSTOX_REDIRECT_URI')
 
     # API URLs
-    UPSTOX_AUTH_URL = f"https://api.upstox.com/v2/login/authorization/dialog"
-    UPSTOX_TOKEN_URL = "https://api.upstox.com/v2/login/authorization/token"
-    UPSTOX_HOLDINGS_URL = "https://api.upstox.com/v2/portfolio/long-term-holdings"
-    UPSTOX_HISTORICAL_URL = "https://api.upstox.com/v3/historical-candle"
+    UPSTOX_BASE_URL = 'https://api.upstox.com'
+    UPSTOX_AUTH_URL = f'{UPSTOX_BASE_URL}/v2/login/authorization/dialog'
+    UPSTOX_TOKEN_URL = f'{UPSTOX_BASE_URL}/v2/login/authorization/token'
+    UPSTOX_HOLDINGS_URL = f'{UPSTOX_BASE_URL}/v2/portfolio/long-term-holdings'
+    UPSTOX_HISTORICAL_URL = f'{UPSTOX_BASE_URL}/v3/historical-candle'
+    UPSTOX_MARKET_QUOTES_URL = f'{UPSTOX_BASE_URL}/v2/market-quote/quotes'
 
     # Benchmark configuration
     BENCHMARK_SYMBOL = 'NSE_INDEX|Nifty 50'

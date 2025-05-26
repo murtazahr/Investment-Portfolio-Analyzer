@@ -57,8 +57,13 @@
     <div class="col-12">
       <div class="card metrics-card">
         <div class="card-body">
-          <h5 class="card-title">
-            <i class="fas fa-clock me-2"></i>Today's Performance Summary
+          <h5 class="card-title d-flex justify-content-between align-items-center">
+            <span>
+              <i class="fas fa-clock me-2"></i>Today's Performance Summary
+            </span>
+            <small class="text-muted" id="last-updated">
+              Last updated: <span id="update-time"></span>
+            </small>
           </h5>
           <div class="row text-center">
             <div class="col-md-4">
@@ -171,11 +176,12 @@
           <td>{{ holding.quantity }}</td>
           <td>₹{{ "%.2f"|format(holding.average_price) }}</td>
           <td>
-            ₹{{ "%.2f"|format(holding.last_price) }}
+            ₹{{ "%.2f"|format(holding.real_time_price if holding.real_time_price else holding.last_price) }}
             {% if holding.day_change != 0 %}
             <br>
             <small class="{% if holding.day_change >= 0 %}text-success{% else %}text-danger{% endif %}">
               {% if holding.day_change >= 0 %}+{% endif %}₹{{ "%.2f"|format(holding.day_change) }}
+              <i class="fas fa-{% if holding.day_change >= 0 %}arrow-up{% else %}arrow-down{% endif %} ms-1"></i>
             </small>
             {% endif %}
           </td>
@@ -206,11 +212,70 @@
     <a href="{{ url_for('portfolio') }}" class="btn btn-custom me-3">
       <i class="fas fa-chart-area me-2"></i>Performance Analysis
     </a>
-    <form action="{{ url_for('refresh') }}" method="post" style="display: inline-block;">
-      <button type="submit" class="btn btn-outline-secondary">
-        <i class="fas fa-sync-alt me-2"></i>Refresh Data
+    <form action="{{ url_for('refresh') }}" method="post" style="display: inline-block;" class="me-2"
+          onsubmit="showLoading('refresh-all-btn', 'Refreshing...')">
+      <button type="submit" class="btn btn-outline-secondary" id="refresh-all-btn">
+        <i class="fas fa-sync-alt me-2"></i>Refresh All Data
       </button>
     </form>
+    <form action="{{ url_for('refresh_day_change') }}" method="post" style="display: inline-block;" class="me-2"
+          onsubmit="showLoading('refresh-day-change-btn', 'Updating...')">
+      <button type="submit" class="btn btn-outline-primary" id="refresh-day-change-btn">
+        <i class="fas fa-calendar-day me-2"></i>Refresh Day Change
+      </button>
+    </form>
+    <button class="btn btn-outline-info" id="auto-refresh-toggle">
+      <i class="fas fa-clock me-2"></i>Auto Refresh: <span id="auto-refresh-status">OFF</span>
+    </button>
   </div>
 </div>
+
+<script>
+  // Show loading state function
+  function showLoading(buttonId, loadingText) {
+    const button = document.getElementById(buttonId);
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>' + loadingText;
+    button.disabled = true;
+  }
+
+  // Auto-refresh functionality
+  let autoRefreshInterval;
+  let isAutoRefreshEnabled = false;
+
+  document.getElementById('auto-refresh-toggle').addEventListener('click', function() {
+    if (isAutoRefreshEnabled) {
+      clearInterval(autoRefreshInterval);
+      isAutoRefreshEnabled = false;
+      document.getElementById('auto-refresh-status').textContent = 'OFF';
+      this.classList.remove('btn-success');
+      this.classList.add('btn-outline-info');
+    } else {
+      // Refresh day change data every 2 minutes
+      autoRefreshInterval = setInterval(function() {
+        // Create a hidden form and submit it
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for("refresh_day_change") }}';
+        form.style.display = 'none';
+        document.body.appendChild(form);
+        form.submit();
+      }, 120000); // 2 minutes
+      isAutoRefreshEnabled = true;
+      document.getElementById('auto-refresh-status').textContent = 'ON (2min)';
+      this.classList.remove('btn-outline-info');
+      this.classList.add('btn-success');
+    }
+  });
+
+  // Update timestamp when page loads
+  document.addEventListener('DOMContentLoaded', function() {
+    const now = new Date();
+    document.getElementById('update-time').textContent = now.toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  });
+</script>
 {% endblock %}

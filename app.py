@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime, timedelta
 
 import plotly.graph_objs as go
@@ -271,11 +272,77 @@ def create_app(config_name=None):
     def refresh():
         """Refresh portfolio cache"""
         try:
-            portfolio_service.refresh_cache()
+            # Check if specifically refreshing day change data
+            refresh_type = request.form.get('type', 'all')
+
+            if refresh_type == 'day_change':
+                portfolio_service.force_refresh_day_change()
+                app.logger.info("Day change data refreshed")
+            else:
+                portfolio_service.refresh_cache()
+                app.logger.info("Portfolio cache refreshed")
+
             return redirect(url_for('summary'))
         except Exception as e:
             app.logger.error(f"Error refreshing cache: {str(e)}")
             return f"Error refreshing data: {str(e)}", 500
+
+    @app.route('/refresh_day_change', methods=['POST'])
+    @login_required
+    def refresh_day_change():
+        """Specifically refresh day change data"""
+        try:
+            print("=== REFRESH DAY CHANGE ROUTE CALLED ===")
+
+            # Check if this is an auto-refresh
+            is_auto_refresh = request.form.get('auto_refresh') == 'true'
+
+            portfolio_service.force_refresh_day_change()
+            app.logger.info(f"Day change data force refreshed (auto: {is_auto_refresh})")
+
+            # Always redirect back to summary, but add auto_refresh parameter if it was auto-triggered
+            if is_auto_refresh:
+                return redirect(url_for('summary', auto_refresh='true'))
+            else:
+                return redirect(url_for('summary'))
+
+        except Exception as e:
+            app.logger.error(f"Error refreshing day change data: {str(e)}")
+            return f"Error refreshing day change data: {str(e)}", 500
+
+    @app.route('/debug_day_change')
+    @login_required
+    def debug_day_change():
+        """Debug endpoint to check day change data"""
+        try:
+            print("=== DEBUG DAY CHANGE ENDPOINT ===")
+
+            # Get fresh data without cache
+            portfolio_service.refresh_cache()
+            summary = portfolio_service.get_portfolio_summary()
+
+            debug_info = {
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'total_day_pnl': summary.total_day_pnl,
+                'total_day_change_percentage': summary.total_day_change_percentage,
+                'holdings_count': len(summary.holdings),
+                'holdings_details': []
+            }
+
+            for holding in summary.holdings:
+                debug_info['holdings_details'].append({
+                    'symbol': holding.tradingsymbol,
+                    'day_change': getattr(holding, 'day_change', 'N/A'),
+                    'day_change_percentage': getattr(holding, 'day_change_percentage', 'N/A'),
+                    'day_pnl': getattr(holding, 'day_pnl', 'N/A'),
+                    'last_price': holding.last_price,
+                    'quantity': holding.quantity
+                })
+
+            return f"<pre>{json.dumps(debug_info, indent=2)}</pre>"
+
+        except Exception as e:
+            return f"Debug error: {str(e)}", 500
 
     def _generate_summary_charts(portfolio_summary):
         """Generate chart data for portfolio summary page"""

@@ -13,12 +13,13 @@ class PortfolioService:
         self.calculator = FinancialCalculator()
         self._holdings_cache = None
         self._cache_timestamp = None
+        self._cache_timeout_minutes = 5  # Unified cache timeout
 
     def _is_cache_valid(self) -> bool:
         """Check if holdings cache is still valid"""
         if not self._cache_timestamp:
             return False
-        return datetime.now() - self._cache_timestamp < timedelta(minutes=15)
+        return datetime.now() - self._cache_timestamp < timedelta(minutes=self._cache_timeout_minutes)
 
     def get_portfolio_summary(self) -> PortfolioSummary:
         """Get comprehensive portfolio summary with day change data"""
@@ -84,7 +85,7 @@ class PortfolioService:
                 holding.investment = df.iloc[i]['investment']
                 holding.return_percentage = df.iloc[i]['return_%']
                 holding.allocation_percentage = df.iloc[i]['allocation_%']
-                # Day change values should already be set from the API
+                # Day change values are already set from the API
                 if not hasattr(holding, 'day_change'):
                     holding.day_change = 0
                 if not hasattr(holding, 'day_change_percentage'):
@@ -182,19 +183,25 @@ class PortfolioService:
     def _get_cached_holdings(self) -> List[Holding]:
         """Get holdings with caching (without day change data)"""
         if not self._is_cache_valid():
-            self._holdings_cache = self.upstox_service.get_holdings()
-            self._cache_timestamp = datetime.now()
+            try:
+                print("Regular cache invalid, fetching fresh holdings...")
+                self._holdings_cache = self.upstox_service.get_holdings()
+                self._cache_timestamp = datetime.now()
+                print(f"Cached {len(self._holdings_cache)} regular holdings")
+            except Exception as e:
+                print(f"Error fetching regular holdings: {str(e)}")
+                self._holdings_cache = []
 
-        return self._holdings_cache
+        return self._holdings_cache or []
 
     def _get_cached_holdings_with_day_change(self) -> List[Holding]:
         """Get holdings with day change data and caching"""
         if not self._is_cache_valid():
             try:
-                print("Cache invalid, fetching fresh holdings with day change...")
+                print("Day change cache invalid, fetching fresh holdings with day change...")
                 self._holdings_cache = self.upstox_service.get_holdings_with_day_change()
                 self._cache_timestamp = datetime.now()
-                print(f"Cached {len(self._holdings_cache)} holdings")
+                print(f"Cached {len(self._holdings_cache)} holdings with day change data")
             except Exception as e:
                 print(f"Error fetching holdings with day change: {str(e)}")
                 # Fallback to regular holdings without day change
@@ -213,12 +220,31 @@ class PortfolioService:
                 except Exception as e2:
                     print(f"Error fetching regular holdings: {str(e2)}")
                     self._holdings_cache = []
-        else:
-            print(f"Using cached holdings: {len(self._holdings_cache or [])} items")
 
         return self._holdings_cache or []
 
     def refresh_cache(self):
-        """Force refresh of holdings cache"""
+        """Force refresh of holdings cache and clear all cached data"""
+        print("Refreshing portfolio cache...")
         self._holdings_cache = None
         self._cache_timestamp = None
+        print("Cache cleared, next request will fetch fresh data")
+
+    def force_refresh_day_change(self):
+        """Force refresh of day change data specifically"""
+        print("Force refreshing day change data...")
+        try:
+            # Bypass cache and fetch fresh day change data
+            self._holdings_cache = self.upstox_service.get_holdings_with_day_change()
+            self._cache_timestamp = datetime.now()
+            print(f"Day change data refreshed for {len(self._holdings_cache)} holdings")
+        except Exception as e:
+            print(f"Error refreshing day change data: {str(e)}")
+            # Fallback to regular holdings
+            self._holdings_cache = self.upstox_service.get_holdings()
+            for holding in self._holdings_cache:
+                if hasattr(holding, 'tradingsymbol'):
+                    holding.day_change = 0
+                    holding.day_change_percentage = 0
+                    holding.day_pnl = 0
+            self._cache_timestamp = datetime.now()

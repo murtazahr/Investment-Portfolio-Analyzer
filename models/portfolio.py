@@ -16,9 +16,11 @@ class Holding:
     investment: float = 0
     return_percentage: float = 0
     allocation_percentage: float = 0
-    day_change: float = 0  # Added for 1-day price change
-    day_change_percentage: float = 0  # Added for 1-day percentage change
-    day_pnl: float = 0  # Added for 1-day P&L impact
+    day_change: float = 0  # Net change from previous close
+    day_change_percentage: float = 0  # Percentage change from previous close
+    day_pnl: float = 0  # P&L impact from day change
+    real_time_price: float = 0  # Real-time price from market quotes
+    previous_close: float = 0  # Previous day's closing price
 
 @dataclass
 class PortfolioSummary:
