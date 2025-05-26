@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import plotly.graph_objs as go
 import plotly.io as pio
-from flask import Flask, render_template, redirect, url_for, request, session
+from flask import Flask, render_template, redirect, url_for, request, session, jsonify
 
 from config import config
 from services.auth_service import AuthService
@@ -90,17 +90,134 @@ def create_app(config_name=None):
             # Create enhanced visualizations including day change
             pie_html, bar_html, day_change_html = _create_summary_charts(portfolio_summary)
 
+            # Calculate gainers and losers for template
+            gainers = len([h for h in portfolio_summary.holdings if getattr(h, 'day_pnl', 0) > 0])
+            losers = len([h for h in portfolio_summary.holdings if getattr(h, 'day_pnl', 0) < 0])
+
             return render_template('summary.html',
                                    portfolio=portfolio_summary,
                                    pie_html=pie_html,
                                    bar_html=bar_html,
-                                   day_change_html=day_change_html)
+                                   day_change_html=day_change_html,
+                                   gainers=gainers,
+                                   losers=losers)
         except Exception as e:
             app.logger.error(f"Error in summary route: {str(e)}")
             return render_template('no_data.html',
                                    start_date=datetime.now().date(),
                                    end_date=datetime.now().date(),
                                    message=f"Error loading portfolio: {str(e)}")
+
+    @app.route('/api/refresh_day_change', methods=['POST'])
+    @login_required
+    def api_refresh_day_change():
+        """API endpoint to refresh day change data without page reload"""
+        try:
+            print("=== API REFRESH DAY CHANGE CALLED ===")
+
+            # Force refresh day change data
+            portfolio_service.force_refresh_day_change()
+
+            # Get updated portfolio summary
+            portfolio_summary = portfolio_service.get_portfolio_summary()
+
+            # Prepare response data
+            response_data = {
+                'status': 'success',
+                'timestamp': datetime.now().strftime('%H:%M:%S'),
+                'total_day_pnl': portfolio_summary.total_day_pnl,
+                'total_day_change_percentage': portfolio_summary.total_day_change_percentage,
+                'total_value': portfolio_summary.total_value,
+                'holdings': []
+            }
+
+            # Add holdings data
+            for holding in portfolio_summary.holdings:
+                response_data['holdings'].append({
+                    'tradingsymbol': holding.tradingsymbol,
+                    'day_change': getattr(holding, 'day_change', 0),
+                    'day_change_percentage': getattr(holding, 'day_change_percentage', 0),
+                    'day_pnl': getattr(holding, 'day_pnl', 0),
+                    'real_time_price': getattr(holding, 'real_time_price', holding.last_price),
+                    'last_price': holding.last_price,
+                    'current_value': holding.current_value,
+                    'quantity': holding.quantity
+                })
+
+            # Count gainers and losers
+            gainers = len([h for h in portfolio_summary.holdings if getattr(h, 'day_pnl', 0) > 0])
+            losers = len([h for h in portfolio_summary.holdings if getattr(h, 'day_pnl', 0) < 0])
+
+            response_data['gainers'] = gainers
+            response_data['losers'] = losers
+
+            app.logger.info("Day change data refreshed via API")
+            return jsonify(response_data)
+
+        except Exception as e:
+            app.logger.error(f"Error in API refresh: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': str(e),
+                'timestamp': datetime.now().strftime('%H:%M:%S')
+            }), 500
+
+    @app.route('/api/portfolio_summary')
+    @login_required
+    def api_portfolio_summary():
+        """API endpoint to get current portfolio summary"""
+        try:
+            portfolio_summary = portfolio_service.get_portfolio_summary()
+
+            # Create charts data for AJAX update
+            pie_html, bar_html, day_change_html = _create_summary_charts(portfolio_summary)
+
+            return jsonify({
+                'status': 'success',
+                'portfolio': {
+                    'total_value': portfolio_summary.total_value,
+                    'total_investment': portfolio_summary.total_investment,
+                    'total_pnl': portfolio_summary.total_pnl,
+                    'total_return_percentage': portfolio_summary.total_return_percentage,
+                    'total_day_pnl': portfolio_summary.total_day_pnl,
+                    'total_day_change_percentage': portfolio_summary.total_day_change_percentage,
+                },
+                'charts': {
+                    'pie_html': pie_html,
+                    'bar_html': bar_html,
+                    'day_change_html': day_change_html
+                },
+                'timestamp': datetime.now().strftime('%H:%M:%S')
+            })
+
+        except Exception as e:
+            app.logger.error(f"Error getting portfolio summary: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), 500
+
+    @app.route('/refresh', methods=['POST'])
+    @login_required
+    def refresh():
+        """Traditional refresh route (fallback)"""
+        try:
+            portfolio_service.refresh_cache()
+            return redirect(url_for('summary'))
+        except Exception as e:
+            app.logger.error(f"Error refreshing cache: {str(e)}")
+            return f"Error refreshing data: {str(e)}", 500
+
+    @app.route('/refresh_day_change', methods=['POST'])
+    @login_required
+    def refresh_day_change():
+        """Traditional day change refresh (fallback)"""
+        try:
+            portfolio_service.force_refresh_day_change()
+            return redirect(url_for('summary'))
+        except Exception as e:
+            app.logger.error(f"Error refreshing day change data: {str(e)}")
+            return f"Error refreshing day change data: {str(e)}", 500
 
     def _create_summary_charts(portfolio_summary):
         """Create enhanced visualizations for portfolio summary including day change"""
@@ -137,7 +254,7 @@ def create_app(config_name=None):
         )])
 
         pie_fig.update_layout(
-            title_text='Asset Allocation',
+            title_text='',
             height=500,
             font=dict(size=12),
             showlegend=True,
@@ -165,7 +282,7 @@ def create_app(config_name=None):
         )])
 
         bar_fig.update_layout(
-            title_text='Individual Stock Performance',
+            title_text='',
             yaxis_title='Return (%)',
             xaxis_title='Stock',
             height=500,
@@ -188,7 +305,7 @@ def create_app(config_name=None):
         )])
 
         day_change_fig.update_layout(
-            title_text='Today\'s Performance by Stock',
+            title_text='',
             yaxis_title='Day Change (%)',
             xaxis_title='Stock',
             height=400,
@@ -267,49 +384,6 @@ def create_app(config_name=None):
             app.logger.error(f"Error in portfolio route: {str(e)}")
             return f"Error loading performance data: {str(e)}", 500
 
-    @app.route('/refresh', methods=['POST'])
-    @login_required
-    def refresh():
-        """Refresh portfolio cache"""
-        try:
-            # Check if specifically refreshing day change data
-            refresh_type = request.form.get('type', 'all')
-
-            if refresh_type == 'day_change':
-                portfolio_service.force_refresh_day_change()
-                app.logger.info("Day change data refreshed")
-            else:
-                portfolio_service.refresh_cache()
-                app.logger.info("Portfolio cache refreshed")
-
-            return redirect(url_for('summary'))
-        except Exception as e:
-            app.logger.error(f"Error refreshing cache: {str(e)}")
-            return f"Error refreshing data: {str(e)}", 500
-
-    @app.route('/refresh_day_change', methods=['POST'])
-    @login_required
-    def refresh_day_change():
-        """Specifically refresh day change data"""
-        try:
-            print("=== REFRESH DAY CHANGE ROUTE CALLED ===")
-
-            # Check if this is an auto-refresh
-            is_auto_refresh = request.form.get('auto_refresh') == 'true'
-
-            portfolio_service.force_refresh_day_change()
-            app.logger.info(f"Day change data force refreshed (auto: {is_auto_refresh})")
-
-            # Always redirect back to summary, but add auto_refresh parameter if it was auto-triggered
-            if is_auto_refresh:
-                return redirect(url_for('summary', auto_refresh='true'))
-            else:
-                return redirect(url_for('summary'))
-
-        except Exception as e:
-            app.logger.error(f"Error refreshing day change data: {str(e)}")
-            return f"Error refreshing day change data: {str(e)}", 500
-
     @app.route('/debug_day_change')
     @login_required
     def debug_day_change():
@@ -343,29 +417,6 @@ def create_app(config_name=None):
 
         except Exception as e:
             return f"Debug error: {str(e)}", 500
-
-    def _generate_summary_charts(portfolio_summary):
-        """Generate chart data for portfolio summary page"""
-        # Enhanced colors matching original
-        colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7']
-
-        # Pie chart data
-        pie_data = {
-            'values': [holding.current_value for holding in portfolio_summary.holdings],
-            'labels': [holding.tradingsymbol for holding in portfolio_summary.holdings],
-            'colors': colors[:len(portfolio_summary.holdings)]
-        }
-
-        # Bar chart data
-        bar_data = {
-            'symbols': [holding.tradingsymbol for holding in portfolio_summary.holdings],
-            'returns': [holding.return_percentage for holding in portfolio_summary.holdings]
-        }
-
-        return {
-            'pie': pie_data,
-            'bar': bar_data
-        }
 
     def _create_performance_chart(portfolio_metrics, benchmark_metrics):
         """Create performance comparison chart"""

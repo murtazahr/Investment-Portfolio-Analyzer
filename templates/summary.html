@@ -12,7 +12,7 @@
       <div class="card metrics-card h-100">
         <div class="card-body text-center">
           <div class="metric-label">Total Portfolio Value</div>
-          <div class="metric-value text-primary">{{ format_currency(portfolio.total_value) }}</div>
+          <div class="metric-value text-primary" data-metric="total-value">{{ format_currency(portfolio.total_value) }}</div>
         </div>
       </div>
     </div>
@@ -74,7 +74,7 @@
                 <i class="fas fa-arrow-down text-danger me-2"></i>
                 {% endif %}
                 <div>
-                  <div class="fw-bold {% if portfolio.total_day_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+                  <div class="fw-bold {% if portfolio.total_day_pnl >= 0 %}text-success{% else %}text-danger{% endif %}" data-metric="total-day-pnl">
                     {{ format_currency(portfolio.total_day_pnl) }}
                   </div>
                   <small class="text-muted">Day P&L</small>
@@ -89,7 +89,7 @@
                 <i class="fas fa-percent text-danger me-2"></i>
                 {% endif %}
                 <div>
-                  <div class="fw-bold {% if portfolio.total_day_change_percentage >= 0 %}text-success{% else %}text-danger{% endif %}">
+                  <div class="fw-bold {% if portfolio.total_day_change_percentage >= 0 %}text-success{% else %}text-danger{% endif %}" data-metric="total-day-change">
                     {{ format_percentage(portfolio.total_day_change_percentage) }}
                   </div>
                   <small class="text-muted">Day Change %</small>
@@ -98,11 +98,9 @@
             </div>
             <div class="col-md-4">
               <div class="d-flex align-items-center justify-content-center">
-                {% set gainers = portfolio.holdings | selectattr('day_pnl', '>', 0) | list | length %}
-                {% set losers = portfolio.holdings | selectattr('day_pnl', '<', 0) | list | length %}
                 <i class="fas fa-chart-bar text-primary me-2"></i>
                 <div>
-                  <div class="fw-bold text-primary">
+                  <div class="fw-bold text-primary" data-metric="gainers-losers">
                     {{ gainers }} / {{ losers }}
                   </div>
                   <small class="text-muted">Gainers / Losers</small>
@@ -118,19 +116,23 @@
   <!-- Charts Section - Server-side rendered -->
   <div class="row">
     <div class="col-lg-6">
-      <div class="chart-container">
+      <div class="chart-container" data-chart="pie">
         <h5 class="text-center mb-3">
           <i class="fas fa-chart-pie me-2"></i>Asset Allocation
         </h5>
-        {{ pie_html|safe }}
+        <div class="chart-content">
+          {{ pie_html|safe }}
+        </div>
       </div>
     </div>
     <div class="col-lg-6">
-      <div class="chart-container">
+      <div class="chart-container" data-chart="bar">
         <h5 class="text-center mb-3">
           <i class="fas fa-chart-bar me-2"></i>Individual Performance
         </h5>
-        {{ bar_html|safe }}
+        <div class="chart-content">
+          {{ bar_html|safe }}
+        </div>
       </div>
     </div>
   </div>
@@ -138,11 +140,13 @@
   <!-- Day Change Chart -->
   <div class="row">
     <div class="col-12">
-      <div class="chart-container">
+      <div class="chart-container" data-chart="day-change">
         <h5 class="text-center mb-3">
           <i class="fas fa-calendar-day me-2"></i>Today's Performance by Stock
         </h5>
-        {{ day_change_html|safe }}
+        <div class="chart-content">
+          {{ day_change_html|safe }}
+        </div>
       </div>
     </div>
   </div>
@@ -212,18 +216,12 @@
     <a href="{{ url_for('portfolio') }}" class="btn btn-custom me-3">
       <i class="fas fa-chart-area me-2"></i>Performance Analysis
     </a>
-    <form action="{{ url_for('refresh') }}" method="post" style="display: inline-block;" class="me-2"
-          onsubmit="showLoading('refresh-all-btn', 'Refreshing...')">
-      <button type="submit" class="btn btn-outline-secondary" id="refresh-all-btn">
-        <i class="fas fa-sync-alt me-2"></i>Refresh All Data
-      </button>
-    </form>
-    <form action="{{ url_for('refresh_day_change') }}" method="post" style="display: inline-block;" class="me-2"
-          onsubmit="showLoading('refresh-day-change-btn', 'Updating...')">
-      <button type="submit" class="btn btn-outline-primary" id="refresh-day-change-btn">
-        <i class="fas fa-calendar-day me-2"></i>Refresh Day Change
-      </button>
-    </form>
+    <button type="button" class="btn btn-outline-secondary me-2" id="refresh-all-btn" onclick="refreshAllData()">
+      <i class="fas fa-sync-alt me-2"></i>Refresh All Data
+    </button>
+    <button type="button" class="btn btn-outline-primary me-2" id="refresh-day-change-btn" onclick="refreshDayChange()">
+      <i class="fas fa-calendar-day me-2"></i>Refresh Day Change
+    </button>
     <button class="btn btn-outline-info" id="auto-refresh-toggle">
       <i class="fas fa-clock me-2"></i>Auto Refresh: <span id="auto-refresh-status">OFF</span>
     </button>
@@ -231,44 +229,290 @@
 </div>
 
 <script>
-  // Show loading state function
-  function showLoading(buttonId, loadingText) {
-    const button = document.getElementById(buttonId);
-    button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>' + loadingText;
-    button.disabled = true;
+  // AJAX-based refresh functions
+  async function refreshDayChange(isAutoRefresh = false) {
+    console.log('Refreshing day change data via AJAX...');
+
+    const button = document.getElementById('refresh-day-change-btn');
+    const originalHTML = button.innerHTML;
+
+    try {
+      // Show loading state
+      button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>' + (isAutoRefresh ? 'Auto Updating...' : 'Updating...');
+      button.disabled = true;
+
+      // Make AJAX request
+      const response = await fetch('/api/refresh_day_change', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin'
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        // Update the UI with new data
+        updateDashboardData(data);
+
+        // Update timestamp
+        document.getElementById('update-time').textContent = data.timestamp;
+
+        // Show success notification (only for manual refresh, not auto-refresh)
+        if (isAutoRefresh) {
+          // Don't show notification for auto-refresh to avoid spam
+          console.log('Auto-refresh completed successfully');
+        } else {
+          showNotification('Day change data updated successfully', 'success');
+        }
+
+        console.log('Day change refresh successful');
+      } else {
+        throw new Error(data.message || 'Unknown error');
+      }
+
+    } catch (error) {
+      console.error('Error refreshing day change:', error);
+      showNotification('Error updating day change data: ' + error.message, 'error');
+    } finally {
+      // Restore button
+      button.innerHTML = originalHTML;
+      button.disabled = false;
+    }
   }
 
-  // Auto-refresh functionality
-  let autoRefreshInterval;
-  let isAutoRefreshEnabled = false;
+  async function refreshAllData() {
+    console.log('=== REFRESH ALL DATA - USING PAGE RELOAD ===');
 
-  document.getElementById('auto-refresh-toggle').addEventListener('click', function() {
-    if (isAutoRefreshEnabled) {
-      clearInterval(autoRefreshInterval);
-      isAutoRefreshEnabled = false;
-      document.getElementById('auto-refresh-status').textContent = 'OFF';
-      this.classList.remove('btn-success');
-      this.classList.add('btn-outline-info');
-    } else {
-      // Refresh day change data every 2 minutes
-      autoRefreshInterval = setInterval(function() {
-        // Create a hidden form and submit it
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("refresh_day_change") }}';
-        form.style.display = 'none';
-        document.body.appendChild(form);
-        form.submit();
-      }, 120000); // 2 minutes
-      isAutoRefreshEnabled = true;
-      document.getElementById('auto-refresh-status').textContent = 'ON (2min)';
-      this.classList.remove('btn-outline-info');
-      this.classList.add('btn-success');
+    const button = document.getElementById('refresh-all-btn');
+    const originalHTML = button.innerHTML;
+
+    try {
+      // Show loading state
+      button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Refreshing...';
+      button.disabled = true;
+
+      console.log('Clearing cache and redirecting...');
+
+      // Clear cache and redirect to refresh the page with new data
+      const clearResponse = await fetch('/refresh', {
+        method: 'POST',
+        credentials: 'same-origin'
+      });
+
+      if (clearResponse.ok) {
+        // Instead of trying to update charts via AJAX, just reload the page
+        // This ensures server-side rendered charts work properly
+        console.log('Cache cleared, reloading page...');
+        window.location.reload();
+      } else {
+        throw new Error('Failed to clear cache: ' + clearResponse.status);
+      }
+
+    } catch (error) {
+      console.error('=== REFRESH ALL DATA FAILED ===');
+      console.error('Error details:', error);
+      showNotification('Error refreshing data: ' + error.message, 'error');
+
+      // Restore button on error
+      button.innerHTML = originalHTML;
+      button.disabled = false;
     }
-  });
+  }
 
-  // Update timestamp when page loads
-  document.addEventListener('DOMContentLoaded', function() {
+  function updateDayChangeSummaryOnly(data) {
+    // This function only updates the day change summary section, not the main metric cards
+    console.log('Updating ONLY day change summary section');
+
+    // Update total day change percentage (Today's Performance Summary section)
+    const dayChangeElement = document.querySelector('[data-metric="total-day-change"]');
+    if (dayChangeElement) {
+      const changePct = data.total_day_change_percentage;
+      const changeClass = changePct >= 0 ? 'text-success' : 'text-danger';
+      dayChangeElement.className = `fw-bold ${changeClass}`;
+      dayChangeElement.textContent = formatPercentage(changePct);
+    }
+
+    // Update gainers/losers count
+    const gainersLosersElement = document.querySelector('[data-metric="gainers-losers"]');
+    if (gainersLosersElement) {
+      gainersLosersElement.textContent = `${data.gainers} / ${data.losers}`;
+    }
+  }
+
+  function updateDashboardData(data) {
+    // This function should ONLY update day change data, NOT the main metric cards
+    console.log('Updating ONLY day change data (not main metric cards)');
+
+    // Update Today's Change card (4th metric card) - this is day change specific
+    const todayChangeCards = document.querySelectorAll('.metric-value');
+    if (todayChangeCards.length >= 4) {
+      const changeElement = todayChangeCards[3];
+      const pnl = data.total_day_pnl;
+      changeElement.textContent = formatCurrency(pnl);
+      changeElement.className = `metric-value ${pnl >= 0 ? 'text-success' : 'text-danger'}`;
+
+      // Update the percentage below it
+      const changeSmall = changeElement.parentElement.querySelector('small');
+      if (changeSmall) {
+        changeSmall.textContent = `(${formatPercentage(data.total_day_change_percentage)})`;
+        changeSmall.className = pnl >= 0 ? 'text-success' : 'text-danger';
+      }
+      console.log('Updated Today\'s Change card:', pnl);
+    }
+
+    // Update day change summary section only
+    updateDayChangeSummaryOnly(data);
+
+    // Update individual holdings in table (only day change related columns)
+    if (data.holdings && data.holdings.length > 0) {
+      data.holdings.forEach(holding => {
+        updateHoldingRowDayChange(holding);
+      });
+
+      // Update day change chart with client-side rendering
+      updateDayChangeChart(data.holdings);
+    }
+  }
+
+  function updateHoldingRowDayChange(holding) {
+    // Find the table row for this holding
+    const rows = document.querySelectorAll('tbody tr');
+    for (let row of rows) {
+      const symbolCell = row.querySelector('td:first-child strong');
+      if (symbolCell && symbolCell.textContent === holding.tradingsymbol) {
+
+        // Update current price cell (column 3) - only the price and day change part
+        const priceCell = row.cells[3];
+        if (priceCell) {
+          const price = holding.real_time_price || holding.last_price;
+          const dayChange = holding.day_change;
+          const changeClass = dayChange >= 0 ? 'text-success' : 'text-danger';
+          const arrow = dayChange >= 0 ? 'arrow-up' : 'arrow-down';
+          const changeSign = dayChange >= 0 ? '+' : '';
+
+          priceCell.innerHTML = `
+          ₹${price.toFixed(2)}
+          ${dayChange !== 0 ? `<br><small class="${changeClass}">
+            ${changeSign}₹${dayChange.toFixed(2)}
+            <i class="fas fa-${arrow} ms-1"></i>
+          </small>` : ''}
+        `;
+        }
+
+        // Update day change percentage (column 8)
+        const dayChangeCell = row.cells[8];
+        if (dayChangeCell) {
+          const changePct = holding.day_change_percentage;
+          const changeClass = changePct >= 0 ? 'positive' : 'negative';
+          const changeSign = changePct >= 0 ? '+' : '';
+          dayChangeCell.className = changeClass;
+          dayChangeCell.textContent = `${changeSign}${changePct.toFixed(1)}%`;
+        }
+
+        // Update day P&L (column 9)
+        const dayPnlCell = row.cells[9];
+        if (dayPnlCell) {
+          const dayPnl = holding.day_pnl;
+          const pnlClass = dayPnl >= 0 ? 'positive' : 'negative';
+          const pnlSign = dayPnl >= 0 ? '+' : '';
+          dayPnlCell.className = pnlClass;
+          dayPnlCell.textContent = `${pnlSign}${formatCurrency(dayPnl)}`;
+        }
+
+        // DO NOT UPDATE: Current Value, Investment, Total P&L, Return %, Allocation %
+        // These should only update on full refresh
+
+        break;
+      }
+    }
+  }
+
+  function updateFullDashboard(data) {
+    // Update all metric cards
+    const portfolio = data.portfolio;
+
+    console.log('Updating dashboard with data:', portfolio);
+
+    // Update total portfolio value
+    const totalValueElement = document.querySelector('[data-metric="total-value"]');
+    if (totalValueElement) {
+      totalValueElement.textContent = formatCurrency(portfolio.total_value);
+      console.log('Updated total value:', portfolio.total_value);
+    }
+
+    // Update total investment
+    const totalInvestmentElements = document.querySelectorAll('.metric-value.text-info');
+    if (totalInvestmentElements.length > 0) {
+      totalInvestmentElements[0].textContent = formatCurrency(portfolio.total_investment);
+      console.log('Updated total investment:', portfolio.total_investment);
+    }
+
+    // Update total P&L
+    const totalPnlElements = document.querySelectorAll('.metric-value.text-success, .metric-value.text-danger');
+    if (totalPnlElements.length > 0) {
+      const pnlElement = totalPnlElements[0];
+      pnlElement.textContent = formatCurrency(portfolio.total_pnl);
+      pnlElement.className = `metric-value ${portfolio.total_pnl >= 0 ? 'text-success' : 'text-danger'}`;
+
+      // Update the percentage below it
+      const pnlSmall = pnlElement.parentElement.querySelector('small');
+      if (pnlSmall) {
+        pnlSmall.textContent = `(${formatPercentage(portfolio.total_return_percentage)})`;
+        pnlSmall.className = portfolio.total_pnl >= 0 ? 'text-success' : 'text-danger';
+      }
+      console.log('Updated total P&L:', portfolio.total_pnl);
+    }
+
+    // Update today's change (4th metric card)
+    const todayChangeElements = document.querySelectorAll('.metric-value');
+    if (todayChangeElements.length >= 4) {
+      const changeElement = todayChangeElements[3];
+      changeElement.textContent = formatCurrency(portfolio.total_day_pnl);
+      changeElement.className = `metric-value ${portfolio.total_day_pnl >= 0 ? 'text-success' : 'text-danger'}`;
+
+      // Update the percentage below it
+      const changeSmall = changeElement.parentElement.querySelector('small');
+      if (changeSmall) {
+        changeSmall.textContent = `(${formatPercentage(portfolio.total_day_change_percentage)})`;
+        changeSmall.className = portfolio.total_day_pnl >= 0 ? 'text-success' : 'text-danger';
+      }
+      console.log('Updated today\'s change:', portfolio.total_day_pnl);
+    }
+
+    // Update day change summary section using existing function
+    updateDashboardData({
+      total_day_pnl: portfolio.total_day_pnl,
+      total_day_change_percentage: portfolio.total_day_change_percentage,
+      gainers: 0, // Will be calculated if needed
+      losers: 0,
+      holdings: []
+    });
+
+    // Update charts
+    if (data.charts) {
+      console.log('Updating charts...');
+      updateCharts(data.charts);
+
+      // If charts still seem empty, try fallback method
+      setTimeout(() => {
+        const chartContainers = document.querySelectorAll('[data-chart] .chart-content');
+        let emptyCharts = 0;
+        chartContainers.forEach(container => {
+          if (!container.innerHTML.trim() || container.innerHTML.includes('No data available')) {
+            emptyCharts++;
+          }
+        });
+
+        if (emptyCharts > 0) {
+          console.log(`${emptyCharts} charts appear empty, trying fallback update...`);
+          fallbackChartUpdate(data.charts);
+        }
+      }, 100);
+    }
+
+    // Update timestamp
     const now = new Date();
     document.getElementById('update-time').textContent = now.toLocaleTimeString('en-US', {
       hour12: false,
@@ -276,6 +520,310 @@
       minute: '2-digit',
       second: '2-digit'
     });
+
+    console.log('Dashboard update completed');
+  }
+
+  function updateCharts(charts) {
+    console.log('=== UPDATING CHARTS WITH SCRIPT EXECUTION ===');
+    console.log('Charts data received:', charts);
+
+    // Update pie chart
+    const pieContainer = document.querySelector('[data-chart="pie"] .chart-content');
+    console.log('Pie container found:', !!pieContainer);
+    if (pieContainer && charts.pie_html) {
+      console.log('Updating pie chart, HTML length:', charts.pie_html.length);
+      insertHTMLWithScripts(pieContainer, charts.pie_html);
+      console.log('Pie chart updated with scripts');
+    }
+
+    // Update bar chart
+    const barContainer = document.querySelector('[data-chart="bar"] .chart-content');
+    console.log('Bar container found:', !!barContainer);
+    if (barContainer && charts.bar_html) {
+      console.log('Updating bar chart, HTML length:', charts.bar_html.length);
+      insertHTMLWithScripts(barContainer, charts.bar_html);
+      console.log('Bar chart updated with scripts');
+    }
+
+    // Update day change chart
+    const dayChangeContainer = document.querySelector('[data-chart="day-change"] .chart-content');
+    console.log('Day change container found:', !!dayChangeContainer);
+    if (dayChangeContainer && charts.day_change_html) {
+      console.log('Updating day change chart, HTML length:', charts.day_change_html.length);
+      insertHTMLWithScripts(dayChangeContainer, charts.day_change_html);
+      console.log('Day change chart updated with scripts');
+    }
+
+    console.log('=== CHARTS UPDATE COMPLETED ===');
+  }
+
+  // Function to insert HTML and execute any scripts it contains
+  function insertHTMLWithScripts(container, htmlString) {
+    // Clear the container
+    container.innerHTML = '';
+
+    // Create a temporary element to parse the HTML
+    const temp = document.createElement('div');
+    temp.innerHTML = htmlString;
+
+    // Move all child nodes to the container
+    while (temp.firstChild) {
+      const node = temp.firstChild;
+
+      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'SCRIPT') {
+        // Create a new script element and copy attributes and content
+        const script = document.createElement('script');
+
+        // Copy attributes
+        for (let i = 0; i < node.attributes.length; i++) {
+          const attr = node.attributes[i];
+          script.setAttribute(attr.name, attr.value);
+        }
+
+        // Copy content
+        script.textContent = node.textContent;
+
+        // Append the script to container (this will execute it)
+        container.appendChild(script);
+        console.log('Script executed for chart');
+      } else {
+        // For non-script elements, just move them
+        container.appendChild(node);
+      }
+    }
+  }
+
+  // Alternative chart update function if the above fails
+  function fallbackChartUpdate(charts) {
+    console.log('=== FALLBACK CHART UPDATE ===');
+
+    // Try updating without the .chart-content wrapper
+    const pieContainer = document.querySelector('[data-chart="pie"]');
+    if (pieContainer && charts.pie_html) {
+      // Find the existing plotly div and replace it
+      const existingChart = pieContainer.querySelector('div[id*="plotly"]') || pieContainer.querySelector('.chart-content');
+      if (existingChart) {
+        existingChart.outerHTML = charts.pie_html;
+        console.log('Pie chart updated via fallback');
+      }
+    }
+
+    const barContainer = document.querySelector('[data-chart="bar"]');
+    if (barContainer && charts.bar_html) {
+      const existingChart = barContainer.querySelector('div[id*="plotly"]') || barContainer.querySelector('.chart-content');
+      if (existingChart) {
+        existingChart.outerHTML = charts.bar_html;
+        console.log('Bar chart updated via fallback');
+      }
+    }
+
+    const dayChangeContainer = document.querySelector('[data-chart="day-change"]');
+    if (dayChangeContainer && charts.day_change_html) {
+      const existingChart = dayChangeContainer.querySelector('div[id*="plotly"]') || dayChangeContainer.querySelector('.chart-content');
+      if (existingChart) {
+        existingChart.outerHTML = charts.day_change_html;
+        console.log('Day change chart updated via fallback');
+      }
+    }
+  }
+
+  function showNotification(message, type = 'success') {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const icon = type === 'success' ? 'check-circle' : 'exclamation-triangle';
+
+    const notification = document.createElement('div');
+    notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.innerHTML = `
+    <i class="fas fa-${icon} me-2"></i>${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+    document.body.appendChild(notification);
+
+    // Auto-dismiss after 4 seconds
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.remove();
+      }
+    }, 4000);
+  }
+
+  function formatCurrency(value) {
+    return `₹${Math.round(value).toLocaleString()}`;
+  }
+
+  function formatPercentage(value) {
+    return `${value.toFixed(1)}%`;
+  }
+
+  function updateDayChangeChart(holdings) {
+    console.log('Updating day change chart with client-side rendering...');
+
+    // Extract data for the chart
+    const symbols = holdings.map(h => h.tradingsymbol);
+    const dayChangePercentages = holdings.map(h => h.day_change_percentage);
+
+    console.log('Chart data:', { symbols, dayChangePercentages });
+
+    // Find the day change chart container
+    const dayChangeContainer = document.querySelector('[data-chart="day-change"] .chart-content');
+    if (!dayChangeContainer) {
+      console.warn('Day change chart container not found');
+      return;
+    }
+
+    // Create a unique ID for this chart
+    const chartId = 'day-change-chart-' + Date.now();
+
+    // Create the chart div
+    dayChangeContainer.innerHTML = `<div id="${chartId}" style="width:100%;height:400px;"></div>`;
+
+    // Check if Plotly is available
+    if (typeof Plotly === 'undefined') {
+      console.warn('Plotly not available, cannot update day change chart');
+      dayChangeContainer.innerHTML = '<div class="text-center p-4"><p>Chart update requires page refresh</p></div>';
+      return;
+    }
+
+    // Create the bar chart data
+    const chartData = [{
+      x: symbols,
+      y: dayChangePercentages,
+      type: 'bar',
+      marker: {
+        color: dayChangePercentages.map(val => val >= 0 ? '#28a745' : '#dc3545')
+      },
+      text: dayChangePercentages.map(val => val.toFixed(1) + '%'),
+      textposition: 'outside',
+      hovertemplate: '<b>%{x}</b><br>Day Change: %{y:.1f}%<extra></extra>'
+    }];
+
+    // Chart layout
+    const layout = {
+      xaxis: {
+        title: 'Stock',
+        font: { size: 12 }
+      },
+      yaxis: {
+        title: 'Day Change (%)',
+        font: { size: 12 },
+        gridcolor: 'rgba(0,0,0,0.1)'
+      },
+      height: 400,
+      font: { size: 12 },
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      margin: { t: 20, b: 60, l: 60, r: 20 }, // Reduced top margin since no title
+      showlegend: false
+    };
+
+    // Render the chart
+    Plotly.newPlot(chartId, chartData, layout, {
+      responsive: true,
+      displayModeBar: false
+    }).then(() => {
+      console.log('Day change chart updated successfully');
+    }).catch(error => {
+      console.error('Error updating day change chart:', error);
+      dayChangeContainer.innerHTML = '<div class="text-center p-4"><p>Chart update failed</p></div>';
+    });
+  }
+
+  // Auto-refresh functionality (AJAX-based) - 10 seconds
+  let autoRefreshInterval;
+  let isAutoRefreshEnabled = false;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // Update timestamp when page loads
+    const now = new Date();
+    document.getElementById('update-time').textContent = now.toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+
+    // Check for saved auto-refresh state
+    const storedState = sessionStorage.getItem('autoRefreshEnabled');
+    if (storedState === 'true') {
+      startAutoRefresh();
+    }
+
+    // Add data attributes to elements for easier updating
+    addDataAttributes();
+  });
+
+  function addDataAttributes() {
+    // Add data attributes to key elements for easier AJAX updates
+    const totalDayPnl = document.querySelector('.card-body .metric-value.text-success, .card-body .metric-value.text-danger');
+    if (totalDayPnl && totalDayPnl.textContent.includes('₹')) {
+      totalDayPnl.setAttribute('data-metric', 'total-day-pnl');
+    }
+
+    // Add chart containers
+    const charts = document.querySelectorAll('.chart-container');
+    charts.forEach((chart, index) => {
+      const title = chart.querySelector('h5');
+      if (title) {
+        if (title.textContent.includes('Asset Allocation')) {
+          chart.setAttribute('data-chart', 'pie');
+        } else if (title.textContent.includes('Individual Performance')) {
+          chart.setAttribute('data-chart', 'bar');
+        } else if (title.textContent.includes('Today\'s Performance')) {
+          chart.setAttribute('data-chart', 'day-change');
+        }
+      }
+    });
+  }
+
+  function startAutoRefresh() {
+    if (isAutoRefreshEnabled) return;
+
+    console.log('Starting AJAX auto-refresh (10 seconds)...');
+
+    autoRefreshInterval = setInterval(function() {
+      console.log('Auto-refresh triggered at', new Date().toLocaleTimeString());
+      refreshDayChange(true); // AJAX refresh instead of form submission
+    }, 10000); // 10 seconds
+
+    isAutoRefreshEnabled = true;
+    sessionStorage.setItem('autoRefreshEnabled', 'true');
+
+    // Update UI
+    document.getElementById('auto-refresh-status').textContent = 'ON (10s)';
+    const toggleBtn = document.getElementById('auto-refresh-toggle');
+    toggleBtn.classList.remove('btn-outline-info');
+    toggleBtn.classList.add('btn-success');
+
+    console.log('AJAX auto-refresh started (10 seconds)');
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+    }
+
+    isAutoRefreshEnabled = false;
+    sessionStorage.setItem('autoRefreshEnabled', 'false');
+
+    // Update UI
+    document.getElementById('auto-refresh-status').textContent = 'OFF';
+    const toggleBtn = document.getElementById('auto-refresh-toggle');
+    toggleBtn.classList.remove('btn-success');
+    toggleBtn.classList.add('btn-outline-info');
+
+    console.log('AJAX auto-refresh stopped');
+  }
+
+  // Auto-refresh toggle
+  document.getElementById('auto-refresh-toggle').addEventListener('click', function() {
+    if (isAutoRefreshEnabled) {
+      stopAutoRefresh();
+    } else {
+      startAutoRefresh();
+    }
   });
 </script>
 {% endblock %}
