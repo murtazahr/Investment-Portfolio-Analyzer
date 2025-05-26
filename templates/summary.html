@@ -39,7 +39,27 @@
     </div>
   </div>
 
-  <!-- Holdings Table -->
+  <!-- Charts Section - Server-side rendered -->
+  <div class="row">
+    <div class="col-lg-6">
+      <div class="chart-container">
+        <h5 class="text-center mb-3">
+          <i class="fas fa-chart-pie me-2"></i>Asset Allocation
+        </h5>
+        {{ pie_html|safe }}
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="chart-container">
+        <h5 class="text-center mb-3">
+          <i class="fas fa-chart-bar me-2"></i>Individual Performance
+        </h5>
+        {{ bar_html|safe }}
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed Holdings Table -->
   <div class="table-container">
     <h5 class="p-3 mb-0">
       <i class="fas fa-table me-2"></i>Detailed Holdings
@@ -68,10 +88,10 @@
           <td>₹{{ "%.2f"|format(holding.last_price) }}</td>
           <td>{{ format_currency(holding.current_value) }}</td>
           <td>{{ format_currency(holding.investment) }}</td>
-          <td class="{% if holding.pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+          <td class="{% if holding.pnl >= 0 %}positive{% else %}negative{% endif %}">
             {{ format_currency(holding.pnl) }}
           </td>
-          <td class="{% if holding.return_percentage >= 0 %}text-success{% else %}text-danger{% endif %}">
+          <td class="{% if holding.return_percentage >= 0 %}positive{% else %}negative{% endif %}">
             {{ format_percentage(holding.return_percentage) }}
           </td>
           <td>{{ format_percentage(holding.allocation_percentage) }}</td>

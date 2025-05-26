@@ -1,14 +1,15 @@
-# app.py - Alternative simpler approach
-from flask import Flask, render_template, redirect, url_for, request, session
+import os
 from datetime import datetime, timedelta
+
 import plotly.graph_objs as go
 import plotly.io as pio
-import os
+from flask import Flask, render_template, redirect, url_for, request, session
 
 from config import config
 from services.auth_service import AuthService
 from services.portfolio_service import PortfolioService
 from utils.decorators import login_required
+
 
 def create_app(config_name=None):
     """Application factory pattern"""
@@ -74,13 +75,85 @@ def create_app(config_name=None):
     @app.route('/summary')
     @login_required
     def summary():
-        """Portfolio summary page"""
+        """Portfolio summary page with enhanced visualizations"""
         try:
             portfolio_summary = portfolio_service.get_portfolio_summary()
-            return render_template('summary.html', portfolio=portfolio_summary)
+
+            # Create enhanced visualizations like in the original
+            pie_html, bar_html = _create_summary_charts(portfolio_summary)
+
+            return render_template('summary.html',
+                                   portfolio=portfolio_summary,
+                                   pie_html=pie_html,
+                                   bar_html=bar_html)
         except Exception as e:
             app.logger.error(f"Error in summary route: {str(e)}")
             return f"Error loading portfolio: {str(e)}", 500
+
+    def _create_summary_charts(portfolio_summary):
+        """Create enhanced visualizations for portfolio summary"""
+
+        # Enhanced colors matching original
+        colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7']
+
+        # Pie chart with custom colors and styling
+        pie_fig = go.Figure(data=[go.Pie(
+            labels=[holding.tradingsymbol for holding in portfolio_summary.holdings],
+            values=[holding.current_value for holding in portfolio_summary.holdings],
+            hole=0.4,
+            textinfo='percent+label',
+            hovertemplate='<b>%{label}</b><br>Value: ₹%{value:,.0f}<br>Percentage: %{percent}<extra></extra>',
+            marker=dict(
+                colors=colors[:len(portfolio_summary.holdings)],
+                line=dict(color='white', width=2)
+            )
+        )])
+
+        pie_fig.update_layout(
+            title_text='Asset Allocation',
+            height=500,
+            font=dict(size=12),
+            showlegend=True,
+            legend=dict(
+                orientation="v",
+                yanchor="middle",
+                y=0.5,
+                xanchor="left",
+                x=1.05
+            ),
+            margin=dict(t=40, b=20, l=20, r=120)
+        )
+
+        # Enhanced bar chart with conditional coloring
+        return_percentages = [holding.return_percentage for holding in portfolio_summary.holdings]
+        symbols = [holding.tradingsymbol for holding in portfolio_summary.holdings]
+
+        bar_fig = go.Figure([go.Bar(
+            x=symbols,
+            y=return_percentages,
+            marker_color=[('#28a745' if val >= 0 else '#dc3545') for val in return_percentages],
+            hovertemplate='<b>%{x}</b><br>Return: %{y:.1f}%<extra></extra>',
+            text=[f"{val:.1f}%" for val in return_percentages],
+            textposition='outside'
+        )])
+
+        bar_fig.update_layout(
+            title_text='Individual Stock Performance',
+            yaxis_title='Return (%)',
+            xaxis_title='Stock',
+            height=500,
+            font=dict(size=12),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            margin=dict(t=40, b=60, l=60, r=20)
+        )
+        bar_fig.update_yaxes(gridcolor='rgba(0,0,0,0.1)')
+
+        # Convert to HTML
+        pie_html = pio.to_html(pie_fig, full_html=False)
+        bar_html = pio.to_html(bar_fig, full_html=False)
+
+        return pie_html, bar_html
 
     @app.route('/portfolio')
     @login_required
@@ -122,7 +195,10 @@ def create_app(config_name=None):
                 '1M': (today - timedelta(days=30), today),
                 '3M': (today - timedelta(days=90), today),
                 '6M': (today - timedelta(days=180), today),
-                '1Y': (today - timedelta(days=365), today)
+                '1Y': (today - timedelta(days=365), today),
+                '3Y': (today - timedelta(days=1095), today),
+                '5Y': (today - timedelta(days=1825), today),
+                '10Y': (today - timedelta(days=3650), today),
             }
 
             return render_template('performance.html',
@@ -150,6 +226,29 @@ def create_app(config_name=None):
         except Exception as e:
             app.logger.error(f"Error refreshing cache: {str(e)}")
             return f"Error refreshing data: {str(e)}", 500
+
+    def _generate_summary_charts(portfolio_summary):
+        """Generate chart data for portfolio summary page"""
+        # Enhanced colors matching original
+        colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7']
+
+        # Pie chart data
+        pie_data = {
+            'values': [holding.current_value for holding in portfolio_summary.holdings],
+            'labels': [holding.tradingsymbol for holding in portfolio_summary.holdings],
+            'colors': colors[:len(portfolio_summary.holdings)]
+        }
+
+        # Bar chart data
+        bar_data = {
+            'symbols': [holding.tradingsymbol for holding in portfolio_summary.holdings],
+            'returns': [holding.return_percentage for holding in portfolio_summary.holdings]
+        }
+
+        return {
+            'pie': pie_data,
+            'bar': bar_data
+        }
 
     def _create_performance_chart(portfolio_metrics, benchmark_metrics):
         """Create performance comparison chart"""
