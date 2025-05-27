@@ -58,9 +58,9 @@
       <div class="card metrics-card">
         <div class="card-body">
           <h5 class="card-title d-flex justify-content-between align-items-center">
-            <span>
-              <i class="fas fa-clock me-2"></i>Today's Performance Summary
-            </span>
+          <span>
+            <i class="fas fa-clock me-2"></i>Today's Performance Summary
+          </span>
             <small class="text-muted" id="last-updated">
               Last updated: <span id="update-time"></span>
             </small>
@@ -69,12 +69,12 @@
             <div class="col-md-4">
               <div class="d-flex align-items-center justify-content-center">
                 {% if portfolio.total_day_pnl >= 0 %}
-                <i class="fas fa-arrow-up text-success me-2"></i>
+                <i class="fas fa-arrow-up text-success me-2" data-icon="day-pnl"></i>
                 {% else %}
-                <i class="fas fa-arrow-down text-danger me-2"></i>
+                <i class="fas fa-arrow-down text-danger me-2" data-icon="day-pnl"></i>
                 {% endif %}
                 <div>
-                  <div class="fw-bold {% if portfolio.total_day_pnl >= 0 %}text-success{% else %}text-danger{% endif %}" data-metric="total-day-pnl">
+                  <div class="fw-bold {% if portfolio.total_day_pnl >= 0 %}text-success{% else %}text-danger{% endif %}" data-summary="day-pnl">
                     {{ format_currency(portfolio.total_day_pnl) }}
                   </div>
                   <small class="text-muted">Day P&L</small>
@@ -84,12 +84,12 @@
             <div class="col-md-4">
               <div class="d-flex align-items-center justify-content-center">
                 {% if portfolio.total_day_change_percentage >= 0 %}
-                <i class="fas fa-percent text-success me-2"></i>
+                <i class="fas fa-percent text-success me-2" data-icon="day-change-pct"></i>
                 {% else %}
-                <i class="fas fa-percent text-danger me-2"></i>
+                <i class="fas fa-percent text-danger me-2" data-icon="day-change-pct"></i>
                 {% endif %}
                 <div>
-                  <div class="fw-bold {% if portfolio.total_day_change_percentage >= 0 %}text-success{% else %}text-danger{% endif %}" data-metric="total-day-change">
+                  <div class="fw-bold {% if portfolio.total_day_change_percentage >= 0 %}text-success{% else %}text-danger{% endif %}" data-summary="day-change-pct">
                     {{ format_percentage(portfolio.total_day_change_percentage) }}
                   </div>
                   <small class="text-muted">Day Change %</small>
@@ -100,7 +100,7 @@
               <div class="d-flex align-items-center justify-content-center">
                 <i class="fas fa-chart-bar text-primary me-2"></i>
                 <div>
-                  <div class="fw-bold text-primary" data-metric="gainers-losers">
+                  <div class="fw-bold text-primary" data-summary="gainers-losers">
                     {{ gainers }} / {{ losers }}
                   </div>
                   <small class="text-muted">Gainers / Losers</small>
@@ -322,22 +322,45 @@
   }
 
   function updateDayChangeSummaryOnly(data) {
-    // This function only updates the day change summary section, not the main metric cards
     console.log('Updating ONLY day change summary section');
 
-    // Update total day change percentage (Today's Performance Summary section)
-    const dayChangeElement = document.querySelector('[data-metric="total-day-change"]');
-    if (dayChangeElement) {
-      const changePct = data.total_day_change_percentage;
-      const changeClass = changePct >= 0 ? 'text-success' : 'text-danger';
-      dayChangeElement.className = `fw-bold ${changeClass}`;
-      dayChangeElement.textContent = formatPercentage(changePct);
+    // Update Day P&L in the summary section
+    const dayPnlElement = document.querySelector('[data-summary="day-pnl"]');
+    if (dayPnlElement) {
+      const pnl = data.total_day_pnl;
+      const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
+      dayPnlElement.className = `fw-bold ${pnlClass}`;
+      dayPnlElement.textContent = formatCurrency(pnl);
+      console.log('Updated summary Day P&L:', pnl);
+
+      // Update the icon too
+      const icon = document.querySelector('[data-icon="day-pnl"]');
+      if (icon) {
+        icon.className = pnl >= 0 ? 'fas fa-arrow-up text-success me-2' : 'fas fa-arrow-down text-danger me-2';
+      }
     }
 
-    // Update gainers/losers count
-    const gainersLosersElement = document.querySelector('[data-metric="gainers-losers"]');
+    // Update Day Change % in the summary section
+    const dayChangePctElement = document.querySelector('[data-summary="day-change-pct"]');
+    if (dayChangePctElement) {
+      const changePct = data.total_day_change_percentage;
+      const changeClass = changePct >= 0 ? 'text-success' : 'text-danger';
+      dayChangePctElement.className = `fw-bold ${changeClass}`;
+      dayChangePctElement.textContent = formatPercentage(changePct);
+      console.log('Updated summary Day Change %:', changePct);
+
+      // Update the icon too
+      const icon = document.querySelector('[data-icon="day-change-pct"]');
+      if (icon) {
+        icon.className = changePct >= 0 ? 'fas fa-percent text-success me-2' : 'fas fa-percent text-danger me-2';
+      }
+    }
+
+    // Update gainers/losers count in the summary section
+    const gainersLosersElement = document.querySelector('[data-summary="gainers-losers"]');
     if (gainersLosersElement) {
       gainersLosersElement.textContent = `${data.gainers} / ${data.losers}`;
+      console.log('Updated gainers/losers:', data.gainers, '/', data.losers);
     }
   }
 
