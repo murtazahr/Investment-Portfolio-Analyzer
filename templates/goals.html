@@ -93,11 +93,13 @@
 
             <dt class="col-sm-6">Savings Gap</dt>
             <dd class="col-sm-6 {% if goal.savings_gap > 0 %}text-danger{% else %}text-success{% endif %}">
-              {{ format_currency(abs(goal.savings_gap)) }}
-              {% if goal.savings_gap <= 0 %}
-              <small class="text-success">(Surplus)</small>
-              {% else %}
+              {% if goal.savings_gap > 0 %}
+              {{ format_currency(goal.savings_gap) }}
               <small class="text-danger">(Deficit)</small>
+              {% else %}
+              {% set surplus = -goal.savings_gap %}
+              {{ format_currency(surplus) }}
+              <small class="text-success">(Surplus)</small>
               {% endif %}
             </dd>
 
@@ -229,7 +231,8 @@
               {% if future_value >= goal.goal_amount %}
               <span class="badge bg-success">Goal Achieved</span>
               {% else %}
-              <span class="badge bg-warning">₹{{ "{:,.0f}".format(goal.goal_amount - future_value) }} short</span>
+              {% set shortfall = goal.goal_amount - future_value %}
+              <span class="badge bg-warning">₹{{ "{:,.0f}".format(shortfall) }} short</span>
               {% endif %}
             </td>
           </tr>

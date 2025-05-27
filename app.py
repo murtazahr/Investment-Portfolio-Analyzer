@@ -42,6 +42,14 @@ def create_app(config_name=None):
         """Format percentage for templates"""
         return f"{value:.1f}%"
 
+    @app.template_global()
+    def abs_value(value):
+        """Absolute value function for templates"""
+        return abs(value)
+
+    # Also add abs to the template environment for direct use
+    app.jinja_env.globals['abs'] = abs
+
     @app.route('/')
     def home():
         """Home page - dashboard or login prompt"""
@@ -293,7 +301,7 @@ def create_app(config_name=None):
         )
         bar_fig.update_yaxes(gridcolor='rgba(0,0,0,0.1)')
 
-        # New day change chart
+        # New day change chart with FIXED annotation position
         day_change_percentages = [getattr(holding, 'day_change_percentage', 0) for holding in portfolio_summary.holdings]
         day_change_fig = go.Figure([go.Bar(
             x=symbols,
@@ -619,7 +627,7 @@ def create_app(config_name=None):
             hovertemplate='<b>Portfolio Value Range</b>: ₹%{x:,.0f}<br><b>Frequency</b>: %{y}<br><extra></extra>'
         ))
 
-        # Add percentile lines with better positioning and colors
+        # Add percentile lines with controlled positioning - avoid extremes with small shifts
         percentile_colors = {
             5: '#dc3545',    # Red for worst case
             25: '#fd7e14',   # Orange
@@ -636,25 +644,20 @@ def create_app(config_name=None):
             95: 'Best Case (95%)'
         }
 
-        # Calculate chart bounds for better annotation positioning
-        x_min, x_max = projections.final_values.min(), projections.final_values.max()
-        x_range = x_max - x_min
-
         for percentile in [5, 25, 50, 75, 95]:
             value = projections.percentiles[percentile]
             color = percentile_colors[percentile]
             label = percentile_labels[percentile]
 
-            # Position annotations to avoid overlap
-            if percentile <= 25:
-                annotation_position = "top left"
-                x_shift = -20
-            elif percentile >= 75:
-                annotation_position = "top right"
-                x_shift = 20
-            else:
-                annotation_position = "top center"
-                x_shift = 0
+            # Use top/bottom with small shifts to stay in middle area
+            # 5%, 50%, 95% slightly above chart center
+            # 25%, 75% slightly below chart center
+            if percentile in [5, 50, 95]:  # Worst case, Expected, Best case
+                annotation_position = "top"
+                y_shift = -30  # Negative shift brings it down from top extreme
+            else:  # 25th, 75th percentiles
+                annotation_position = "bottom"
+                y_shift = 30   # Positive shift brings it up from bottom extreme
 
             fig.add_vline(
                 x=value,
@@ -663,11 +666,12 @@ def create_app(config_name=None):
                 line_width=2,
                 annotation_text=f"<b>{label}</b><br>₹{value:,.0f}",
                 annotation_position=annotation_position,
-                annotation_font_size=10,
+                annotation_font_size=9,
                 annotation_font_color=color,
                 annotation_bordercolor=color,
                 annotation_borderwidth=1,
-                annotation_bgcolor="rgba(255,255,255,0.8)"
+                annotation_bgcolor="rgba(255,255,255,0.95)",
+                annotation_yshift=y_shift
             )
 
         # Calculate statistics for subtitle
@@ -687,10 +691,10 @@ def create_app(config_name=None):
             xaxis_title='Portfolio Value (₹)',
             yaxis_title='Number of Simulations',
             showlegend=False,
-            height=550,  # Increased height for better readability
+            height=550,  # Back to reasonable height
             template='plotly_white',
             hovermode='x',
-            margin=dict(t=80, b=60, l=60, r=60)  # Better margins
+            margin=dict(t=100, b=70, l=60, r=60)  # Moderate margins
         )
 
         # Format x-axis with better scaling

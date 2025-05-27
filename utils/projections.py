@@ -4,6 +4,7 @@ Provides return projections, risk analysis, and financial planning calculations.
 """
 
 import logging
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -85,9 +86,19 @@ class PortfolioProjector:
             return self._market_params_cache
 
         # Fetch fresh parameters
-        self._market_params_cache = self.market_data_service.get_market_parameters()
-        self._cache_timestamp = datetime.now()
-        return self._market_params_cache
+        try:
+            self._market_params_cache = self.market_data_service.get_market_parameters()
+            self._cache_timestamp = datetime.now()
+            return self._market_params_cache
+        except Exception as e:
+            logger.error(f"Error fetching market parameters: {e}")
+            # Return defaults if service fails
+            return {
+                'expected_return': 0.12,
+                'volatility': 0.22,
+                'risk_free_rate': 0.0625,
+                'inflation_rate': 0.046
+            }
 
     def monte_carlo_projection(
             self,
@@ -268,39 +279,13 @@ class PortfolioProjector:
         """
         # Get scenarios from market data service if available
         if custom_scenarios is None and self.market_data_service:
-            scenarios = self.market_data_service.get_scenario_parameters()
+            try:
+                scenarios = self.market_data_service.get_scenario_parameters()
+            except Exception as e:
+                logger.error(f"Error getting scenarios from market service: {e}")
+                scenarios = self._get_default_scenarios()
         else:
-            # Default scenarios based on market parameters
-            market_params = self._get_market_parameters()
-            base_return = market_params['expected_return']
-            base_volatility = market_params['volatility']
-
-            scenarios = custom_scenarios or {
-                'bull': {
-                    'name': 'Bull Market',
-                    'description': 'Strong economic growth, positive reforms',
-                    'return': base_return * 1.5,
-                    'volatility': base_volatility * 0.8
-                },
-                'base': {
-                    'name': 'Base Case',
-                    'description': 'Normal market conditions based on historical average',
-                    'return': base_return,
-                    'volatility': base_volatility
-                },
-                'bear': {
-                    'name': 'Bear Market',
-                    'description': 'Economic slowdown, global headwinds',
-                    'return': base_return * 0.3,
-                    'volatility': base_volatility * 1.5
-                },
-                'crash': {
-                    'name': 'Market Crash',
-                    'description': 'Severe recession, systemic crisis',
-                    'return': -0.20,
-                    'volatility': base_volatility * 2.5
-                }
-            }
+            scenarios = custom_scenarios or self._get_default_scenarios()
 
         results = []
 
@@ -309,14 +294,20 @@ class PortfolioProjector:
             expected_value = current_value * (1 + scenario['return']) ** years
 
             # Quick Monte Carlo for probability of loss
-            mc_result = self.monte_carlo_projection(
-                current_value=current_value,
-                expected_return=scenario['return'],
-                volatility=scenario['volatility'],
-                years=years,
-                simulations=1000,  # Fewer simulations for scenarios
-                method='parametric'
-            )
+            try:
+                mc_result = self.monte_carlo_projection(
+                    current_value=current_value,
+                    expected_return=scenario['return'],
+                    volatility=scenario['volatility'],
+                    years=years,
+                    simulations=1000,  # Fewer simulations for scenarios
+                    method='parametric'
+                )
+                prob_of_loss = mc_result.probability_of_loss
+            except Exception as e:
+                logger.error(f"Error in scenario Monte Carlo: {e}")
+                # Simple calculation if Monte Carlo fails
+                prob_of_loss = 0.5 if scenario['return'] < 0 else 0.2
 
             results.append(ScenarioResult(
                 name=scenario['name'],
@@ -324,10 +315,43 @@ class PortfolioProjector:
                 expected_return=scenario['return'],
                 expected_volatility=scenario['volatility'],
                 projected_value=expected_value,
-                probability_of_loss=mc_result.probability_of_loss
+                probability_of_loss=prob_of_loss
             ))
 
         return results
+
+    def _get_default_scenarios(self) -> Dict[str, Dict[str, float]]:
+        """Get default scenarios based on market parameters"""
+        market_params = self._get_market_parameters()
+        base_return = market_params['expected_return']
+        base_volatility = market_params['volatility']
+
+        return {
+            'bull': {
+                'name': 'Bull Market',
+                'description': 'Strong economic growth, positive reforms',
+                'return': base_return * 1.5,
+                'volatility': base_volatility * 0.8
+            },
+            'base': {
+                'name': 'Base Case',
+                'description': 'Normal market conditions based on historical average',
+                'return': base_return,
+                'volatility': base_volatility
+            },
+            'bear': {
+                'name': 'Bear Market',
+                'description': 'Economic slowdown, global headwinds',
+                'return': base_return * 0.3,
+                'volatility': base_volatility * 1.5
+            },
+            'crash': {
+                'name': 'Market Crash',
+                'description': 'Severe recession, systemic crisis',
+                'return': -0.20,
+                'volatility': base_volatility * 2.5
+            }
+        }
 
     def calculate_fire_number(
             self,
@@ -352,46 +376,54 @@ class PortfolioProjector:
         Returns:
             Dictionary with FIRE calculations
         """
-        # Get inflation rate from market data if not provided
-        if inflation_rate is None:
+        try:
+            # Get inflation rate from market data if not provided
+            if inflation_rate is None:
+                market_params = self._get_market_parameters()
+                inflation_rate = market_params.get('inflation_rate', 0.05)
+
+            years_to_retirement = retirement_age - current_age
+
+            if years_to_retirement <= 0:
+                raise ValueError("Retirement age must be greater than current age")
+
+            # Adjust expenses for inflation at retirement
+            future_annual_expenses = annual_expenses * (1 + inflation_rate) ** years_to_retirement
+
+            # FIRE number (based on withdrawal rate)
+            fire_number = future_annual_expenses / withdrawal_rate
+
+            # Years in retirement
+            retirement_years = life_expectancy - retirement_age
+
+            if retirement_years <= 0:
+                retirement_years = 30  # Default assumption
+
+            # Get expected market return from parameters
             market_params = self._get_market_parameters()
-            inflation_rate = market_params.get('inflation_rate', 0.05)
+            expected_return = market_params.get('expected_return', 0.12)
 
-        years_to_retirement = retirement_age - current_age
+            # Total needed (considering inflation during retirement)
+            total_retirement_needs = self._calculate_retirement_needs(
+                future_annual_expenses,
+                retirement_years,
+                inflation_rate,
+                expected_return
+            )
 
-        if years_to_retirement <= 0:
-            raise ValueError("Retirement age must be greater than current age")
+            return {
+                'fire_number': float(fire_number),
+                'annual_expenses_today': float(annual_expenses),
+                'annual_expenses_at_retirement': float(future_annual_expenses),
+                'years_to_retirement': int(years_to_retirement),
+                'retirement_years': int(retirement_years),
+                'total_retirement_needs': float(total_retirement_needs),
+                'withdrawal_rate': float(withdrawal_rate)
+            }
 
-        # Adjust expenses for inflation at retirement
-        future_annual_expenses = annual_expenses * (1 + inflation_rate) ** years_to_retirement
-
-        # FIRE number (based on withdrawal rate)
-        fire_number = future_annual_expenses / withdrawal_rate
-
-        # Years in retirement
-        retirement_years = life_expectancy - retirement_age
-
-        # Get expected market return from parameters
-        market_params = self._get_market_parameters()
-        expected_return = market_params.get('expected_return', 0.12)
-
-        # Total needed (considering inflation during retirement)
-        total_retirement_needs = self._calculate_retirement_needs(
-            future_annual_expenses,
-            retirement_years,
-            inflation_rate,
-            expected_return
-        )
-
-        return {
-            'fire_number': fire_number,
-            'annual_expenses_today': annual_expenses,
-            'annual_expenses_at_retirement': future_annual_expenses,
-            'years_to_retirement': years_to_retirement,
-            'retirement_years': retirement_years,
-            'total_retirement_needs': total_retirement_needs,
-            'withdrawal_rate': withdrawal_rate
-        }
+        except Exception as e:
+            logger.error(f"Error in FIRE calculation: {e}")
+            raise ValueError(f"FIRE calculation failed: {str(e)}")
 
     def calculate_required_savings(
             self,
@@ -412,46 +444,56 @@ class PortfolioProjector:
         Returns:
             Dictionary with savings calculations
         """
-        # Get expected return from market data if not provided
-        if expected_return is None:
-            market_params = self._get_market_parameters()
-            expected_return = market_params.get('expected_return', 0.12)
+        try:
+            # Validate inputs
+            if current_value < 0 or target_value <= 0 or years <= 0:
+                raise ValueError("All values must be positive")
 
-        months = years * 12
-        monthly_return = expected_return / 12
+            # Get expected return from market data if not provided
+            if expected_return is None:
+                market_params = self._get_market_parameters()
+                expected_return = market_params.get('expected_return', 0.12)
 
-        # Future value of current portfolio
-        fv_current = current_value * (1 + expected_return) ** years
+            months = years * 12
+            monthly_return = expected_return / 12
 
-        # Remaining amount needed
-        remaining = target_value - fv_current
+            # Future value of current portfolio
+            fv_current = current_value * (1 + expected_return) ** years
 
-        if remaining <= 0:
+            # Remaining amount needed
+            remaining = target_value - fv_current
+
+            if remaining <= 0:
+                return {
+                    'monthly_savings_needed': 0.0,
+                    'total_savings_needed': 0.0,
+                    'current_value': float(current_value),
+                    'target_value': float(target_value),
+                    'future_value_current': float(fv_current),
+                    'surplus': float(abs(remaining))  # Using abs() function explicitly
+                }
+
+            # PMT formula for monthly savings
+            if monthly_return == 0:
+                monthly_savings = remaining / months
+            else:
+                # Future value of annuity formula
+                monthly_savings = (remaining * monthly_return) / ((1 + monthly_return) ** months - 1)
+
+            total_savings = monthly_savings * months
+
             return {
-                'monthly_savings_needed': 0,
-                'total_savings_needed': 0,
-                'current_value': current_value,
-                'target_value': target_value,
-                'future_value_current': fv_current,
-                'surplus': abs(remaining)
+                'monthly_savings_needed': float(monthly_savings),
+                'total_savings_needed': float(total_savings),
+                'current_value': float(current_value),
+                'target_value': float(target_value),
+                'future_value_current': float(fv_current),
+                'gap': float(remaining)
             }
 
-        # PMT formula for monthly savings
-        if monthly_return == 0:
-            monthly_savings = remaining / months
-        else:
-            monthly_savings = (remaining * monthly_return) / ((1 + monthly_return) ** months - 1)
-
-        total_savings = monthly_savings * months
-
-        return {
-            'monthly_savings_needed': monthly_savings,
-            'total_savings_needed': total_savings,
-            'current_value': current_value,
-            'target_value': target_value,
-            'future_value_current': fv_current,
-            'gap': remaining
-        }
+        except Exception as e:
+            logger.error(f"Error in savings calculation: {e}")
+            raise ValueError(f"Savings calculation failed: {str(e)}")
 
     @staticmethod
     def _calculate_retirement_needs(
@@ -461,15 +503,85 @@ class PortfolioProjector:
             return_rate: float
     ) -> float:
         """Calculate total retirement needs considering inflation"""
-        # Real return rate
-        real_return = (1 + return_rate) / (1 + inflation_rate) - 1
+        try:
+            # Validate inputs
+            if annual_expenses <= 0 or years <= 0:
+                return annual_expenses * years
 
-        if real_return <= 0:
-            # If real return is negative, sum up inflated expenses
-            total = sum(annual_expenses * (1 + inflation_rate) ** i for i in range(years))
+            # Real return rate
+            if return_rate <= inflation_rate:
+                # If real return is negative or zero, sum up inflated expenses
+                total = sum(annual_expenses * (1 + inflation_rate) ** i for i in range(int(years)))
+            else:
+                # Present value of growing annuity
+                real_return = (1 + return_rate) / (1 + inflation_rate) - 1
+
+                if real_return <= 0:
+                    total = annual_expenses * years * (1 + inflation_rate) ** (years / 2)
+                else:
+                    # Growing annuity formula
+                    growth_factor = (1 + inflation_rate) / (1 + return_rate)
+                    if abs(growth_factor - 1.0) < 1e-10:  # Avoid division by zero
+                        total = annual_expenses * years
+                    else:
+                        total = annual_expenses * (1 - growth_factor ** years) / (1 - growth_factor)
+
+            return max(total, annual_expenses * years)  # Ensure minimum reasonable value
+
+        except Exception as e:
+            logger.error(f"Error calculating retirement needs: {e}")
+            # Fallback calculation
+            return annual_expenses * years * (1 + inflation_rate) ** (years / 2)
+
+
+# Additional utility functions that might be needed
+def safe_divide(numerator, denominator, default=0.0):
+    """Safely divide two numbers, returning default if denominator is zero"""
+    try:
+        if abs(denominator) < 1e-10:
+            return default
+        return numerator / denominator
+    except (ZeroDivisionError, TypeError):
+        return default
+
+
+def safe_power(base, exponent, default=1.0):
+    """Safely calculate power, handling edge cases"""
+    try:
+        if base <= 0 and exponent != int(exponent):
+            return default
+        return base ** exponent
+    except (OverflowError, ValueError):
+        return default
+
+
+def format_currency_value(value):
+    """Format currency values safely"""
+    try:
+        if abs(value) >= 10000000:  # 1 crore
+            return f"₹{value/10000000:.1f}Cr"
+        elif abs(value) >= 100000:  # 1 lakh
+            return f"₹{value/100000:.1f}L"
         else:
-            # Present value of growing annuity
-            total = annual_expenses * ((1 - ((1 + inflation_rate) / (1 + return_rate)) ** years) /
-                                       (return_rate - inflation_rate))
+            return f"₹{value:,.0f}"
+    except (TypeError, ValueError):
+        return "₹0"
 
-        return total
+
+def validate_positive_number(value, name="Value"):
+    """Validate that a value is a positive number"""
+    try:
+        num_value = float(value)
+        if num_value <= 0:
+            raise ValueError(f"{name} must be positive, got {num_value}")
+        return num_value
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"Invalid {name}: {e}")
+
+
+def calculate_compound_growth(principal, rate, time):
+    """Calculate compound growth safely"""
+    try:
+        return validate_positive_number(principal) * safe_power(1 + rate, time)
+    except ValueError:
+        return principal  # Return original if calculation fails

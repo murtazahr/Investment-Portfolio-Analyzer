@@ -36,7 +36,11 @@
         <div class="card-body text-center">
           <div class="metric-label">Gap to FIRE</div>
           <div class="metric-value {% if fire.gap_to_fire > 0 %}text-danger{% else %}text-success{% endif %}">
-            {{ format_currency(abs(fire.gap_to_fire)) }}
+            {% if fire.gap_to_fire > 0 %}
+            {{ format_currency(fire.gap_to_fire) }}
+            {% else %}
+            {{ format_currency(-fire.gap_to_fire) }}
+            {% endif %}
           </div>
           <small class="{% if fire.on_track %}text-success{% else %}text-danger{% endif %}">
             {% if fire.on_track %}On Track{% else %}Behind Schedule{% endif %}

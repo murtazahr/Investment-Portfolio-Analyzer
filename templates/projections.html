@@ -137,11 +137,11 @@
       <h5 class="card-title">
         <i class="fas fa-cog me-2"></i>Projection Parameters
       </h5>
-      <form method="GET" action="{{ url_for('projections') }}" class="needs-validation" novalidate>
+      <form method="GET" action="{{ url_for('projections') }}" id="projectionForm">
         <div class="row g-3">
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label for="years-select" class="form-label fw-semibold">Time Horizon</label>
-            <select name="years" id="years-select" class="form-select" onchange="this.form.submit()">
+            <select name="years" id="years-select" class="form-select" onchange="document.getElementById('projectionForm').submit()">
               <option value="1"{% if years == 1 %} selected{% endif %}>1 Year</option>
               <option value="3"{% if years == 3 %} selected{% endif %}>3 Years</option>
               <option value="5"{% if years == 5 %} selected{% endif %}>5 Years</option>
@@ -151,18 +151,18 @@
               <option value="30"{% if years == 30 %} selected{% endif %}>30 Years</option>
             </select>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label for="simulations-select" class="form-label fw-semibold">Simulations</label>
-            <select name="simulations" id="simulations-select" class="form-select" onchange="this.form.submit()">
+            <select name="simulations" id="simulations-select" class="form-select" onchange="document.getElementById('projectionForm').submit()">
               <option value="1000"{% if simulations == 1000 %} selected{% endif %}>1,000 (Fast)</option>
               <option value="10000"{% if simulations == 10000 %} selected{% endif %}>10,000 (Standard)</option>
               <option value="50000"{% if simulations == 50000 %} selected{% endif %}>50,000 (Detailed)</option>
               <option value="100000"{% if simulations == 100000 %} selected{% endif %}>100,000 (Maximum)</option>
             </select>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label for="method-select" class="form-label fw-semibold">Method</label>
-            <select name="method" id="method-select" class="form-select" onchange="this.form.submit()">
+            <select name="method" id="method-select" class="form-select" onchange="document.getElementById('projectionForm').submit()">
               <option value="portfolio_aware"{% if method == 'portfolio_aware' %} selected{% endif %}>Portfolio-Aware (Recommended)</option>
               <option value="correlated"{% if method == 'correlated' %} selected{% endif %}>Correlation-Aware</option>
               <option value="historical"{% if method == 'historical' %} selected{% endif %}>Historical Bootstrap</option>
@@ -171,12 +171,6 @@
             {% if portfolio_insights %}
             <small class="text-muted">{{ portfolio_insights.method_description }}</small>
             {% endif %}
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">&nbsp;</label>
-            <button type="submit" class="btn btn-primary d-block w-100">
-              <i class="fas fa-calculator me-2"></i>Recalculate
-            </button>
           </div>
         </div>
       </form>
@@ -408,5 +402,36 @@
   .border-info {
     border-width: 2px !important;
   }
+
+  /* Loading spinner for form submissions */
+  .form-select:disabled {
+    opacity: 0.7;
+  }
+
+  /* Add subtle loading indication */
+  #projectionForm.loading select {
+    pointer-events: none;
+    opacity: 0.7;
+  }
 </style>
+
+<script>
+  // Add loading state when form changes
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('projectionForm');
+    const selects = form.querySelectorAll('select');
+
+    selects.forEach(select => {
+      select.addEventListener('change', function() {
+        // Add loading class
+        form.classList.add('loading');
+
+        // Disable all selects temporarily
+        selects.forEach(s => s.disabled = true);
+
+        // The form will submit automatically, page will reload
+      });
+    });
+  });
+</script>
 {% endblock %}

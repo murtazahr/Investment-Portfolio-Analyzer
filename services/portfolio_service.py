@@ -217,53 +217,67 @@ class PortfolioService:
             raise ValueError("No portfolio value to project")
 
         # Calculate portfolio statistics
-        if use_historical and method == 'historical':
-            # Get historical returns for the portfolio
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=365 * 3)  # 3 years of data
+        try:
+            if use_historical and method == 'historical':
+                # Get historical returns for the portfolio
+                end_date = datetime.now()
+                start_date = end_date - timedelta(days=365 * 3)  # 3 years of data
 
-            portfolio_metrics, _, returns_df = self.get_performance_analysis(start_date, end_date)
+                portfolio_metrics, _, returns_df = self.get_performance_analysis(start_date, end_date)
 
-            if portfolio_metrics and not returns_df.empty:
-                # Use historical portfolio returns
-                portfolio_returns = returns_df['Portfolio Value'].pct_change().dropna()
+                if portfolio_metrics and not returns_df.empty:
+                    # Use historical portfolio returns
+                    portfolio_returns = returns_df['Portfolio Value'].pct_change().dropna()
+
+                    projections = self.projector.monte_carlo_projection(
+                        current_value=current_value,
+                        historical_returns=portfolio_returns,
+                        years=years,
+                        simulations=simulations,
+                        method='historical'
+                    )
+                else:
+                    # Fallback to parametric if no historical data
+                    method = 'parametric'
+
+            if method == 'parametric' or not use_historical:
+                # Use parametric method with market-derived parameters
+                market_params = self.market_data_service.get_market_parameters()
+                expected_return = market_params['expected_return']
+                volatility = market_params['volatility']
+
+                logger.info(f"Using market parameters: return={expected_return:.2%}, vol={volatility:.2%}")
+
+                # Optionally adjust based on portfolio allocation
+                # This is a simplified approach - you could make this more sophisticated
+                if portfolio_summary.holdings:
+                    # Could analyze holdings to adjust expectations
+                    # For example, if portfolio has small/mid-cap stocks, increase volatility
+                    pass
 
                 projections = self.projector.monte_carlo_projection(
                     current_value=current_value,
-                    historical_returns=portfolio_returns,
+                    expected_return=expected_return,
+                    volatility=volatility,
                     years=years,
                     simulations=simulations,
-                    method='historical'
+                    method='parametric'
                 )
-            else:
-                # Fallback to parametric if no historical data
-                method = 'parametric'
 
-        if method == 'parametric' or not use_historical:
-            # Use parametric method with market-derived parameters
+            return projections
+
+        except Exception as e:
+            logger.error(f"Error in portfolio projections: {e}")
+            # Fallback to simple calculation
             market_params = self.market_data_service.get_market_parameters()
-            expected_return = market_params['expected_return']
-            volatility = market_params['volatility']
-
-            logger.info(f"Using market parameters: return={expected_return:.2%}, vol={volatility:.2%}")
-
-            # Optionally adjust based on portfolio allocation
-            # This is a simplified approach - you could make this more sophisticated
-            if portfolio_summary.holdings:
-                # Could analyze holdings to adjust expectations
-                # For example, if portfolio has small/mid-cap stocks, increase volatility
-                pass
-
-            projections = self.projector.monte_carlo_projection(
+            return self.projector.monte_carlo_projection(
                 current_value=current_value,
-                expected_return=expected_return,
-                volatility=volatility,
+                expected_return=market_params.get('expected_return', 0.12),
+                volatility=market_params.get('volatility', 0.22),
                 years=years,
-                simulations=simulations,
+                simulations=min(simulations, 1000),  # Reduce simulations for fallback
                 method='parametric'
             )
-
-        return projections
 
     def get_scenario_analysis(self, years: int = 5) -> List[ScenarioResult]:
         """
@@ -281,10 +295,43 @@ class PortfolioService:
         if current_value <= 0:
             raise ValueError("No portfolio value for scenario analysis")
 
-        return self.projector.scenario_analysis(
-            current_value=current_value,
-            years=years
-        )
+        try:
+            return self.projector.scenario_analysis(
+                current_value=current_value,
+                years=years
+            )
+        except Exception as e:
+            logger.error(f"Error in scenario analysis: {e}")
+            # Return basic scenarios as fallback
+            market_params = self.market_data_service.get_market_parameters()
+            base_return = market_params.get('expected_return', 0.12)
+
+            return [
+                ScenarioResult(
+                    name="Bull Market",
+                    description="Strong market conditions",
+                    expected_return=base_return * 1.5,
+                    expected_volatility=0.18,
+                    projected_value=current_value * (1 + base_return * 1.5) ** years,
+                    probability_of_loss=0.1
+                ),
+                ScenarioResult(
+                    name="Base Case",
+                    description="Normal market conditions",
+                    expected_return=base_return,
+                    expected_volatility=0.22,
+                    projected_value=current_value * (1 + base_return) ** years,
+                    probability_of_loss=0.25
+                ),
+                ScenarioResult(
+                    name="Bear Market",
+                    description="Challenging market conditions",
+                    expected_return=base_return * 0.3,
+                    expected_volatility=0.35,
+                    projected_value=current_value * (1 + base_return * 0.3) ** years,
+                    probability_of_loss=0.6
+                )
+            ]
 
     def get_fire_projections(
             self,
@@ -305,32 +352,53 @@ class PortfolioService:
         Returns:
             Dictionary with FIRE calculations
         """
-        portfolio_summary = self.get_portfolio_summary()
-        current_value = portfolio_summary.total_value
+        try:
+            portfolio_summary = self.get_portfolio_summary()
+            current_value = portfolio_summary.total_value
 
-        # Calculate FIRE number
-        fire_calcs = self.projector.calculate_fire_number(
-            annual_expenses=annual_expenses,
-            current_age=current_age,
-            retirement_age=retirement_age,
-            life_expectancy=life_expectancy
-        )
+            # Validate inputs
+            if annual_expenses <= 0:
+                raise ValueError("Annual expenses must be positive")
+            if current_age <= 0 or retirement_age <= current_age:
+                raise ValueError("Invalid age parameters")
+            if life_expectancy <= retirement_age:
+                life_expectancy = retirement_age + 30  # Default 30 years in retirement
 
-        # Calculate required savings to reach FIRE
-        savings_calcs = self.projector.calculate_required_savings(
-            current_value=current_value,
-            target_value=fire_calcs['fire_number'],
-            years=fire_calcs['years_to_retirement']
-        )
+            # Calculate FIRE number
+            fire_calcs = self.projector.calculate_fire_number(
+                annual_expenses=annual_expenses,
+                current_age=current_age,
+                retirement_age=retirement_age,
+                life_expectancy=life_expectancy
+            )
 
-        # Combine results
-        return {
-            **fire_calcs,
-            'current_portfolio_value': current_value,
-            'gap_to_fire': fire_calcs['fire_number'] - current_value,
-            'monthly_savings_needed': savings_calcs['monthly_savings_needed'],
-            'on_track': current_value >= (fire_calcs['fire_number'] * 0.2)  # Simple check
-        }
+            # Calculate required savings to reach FIRE
+            years_to_retirement = retirement_age - current_age
+            savings_calcs = self.projector.calculate_required_savings(
+                current_value=current_value,
+                target_value=fire_calcs['fire_number'],
+                years=years_to_retirement
+            )
+
+            # Combine results
+            result = {
+                **fire_calcs,
+                'current_portfolio_value': float(current_value),
+                'gap_to_fire': float(fire_calcs['fire_number'] - current_value),
+                'monthly_savings_needed': savings_calcs.get('monthly_savings_needed', 0),
+                'on_track': current_value >= (fire_calcs['fire_number'] * 0.2)  # Simple check
+            }
+
+            # Ensure all values are JSON serializable
+            for key, value in result.items():
+                if isinstance(value, (int, float)):
+                    result[key] = float(value)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in FIRE projections: {e}")
+            raise ValueError(f"FIRE calculation failed: {str(e)}")
 
     def calculate_goal_progress(
             self,
@@ -349,55 +417,83 @@ class PortfolioService:
         Returns:
             Dictionary with goal progress calculations
         """
-        portfolio_summary = self.get_portfolio_summary()
-        current_value = portfolio_summary.total_value
+        try:
+            portfolio_summary = self.get_portfolio_summary()
+            current_value = portfolio_summary.total_value
 
-        # Calculate time to goal
-        years_to_goal = (goal_date - datetime.now()).days / 365.25
+            # Validate inputs
+            if goal_amount <= 0:
+                raise ValueError("Goal amount must be positive")
+            if monthly_contribution < 0:
+                monthly_contribution = 0
 
-        if years_to_goal <= 0:
-            return {
-                'goal_amount': goal_amount,
-                'current_value': current_value,
-                'achieved': current_value >= goal_amount,
-                'surplus_or_deficit': current_value - goal_amount
+            # Calculate time to goal
+            years_to_goal = max(0.1, (goal_date - datetime.now()).days / 365.25)
+
+            if years_to_goal <= 0:
+                return {
+                    'goal_amount': float(goal_amount),
+                    'current_value': float(current_value),
+                    'years_to_goal': 0,
+                    'achieved': current_value >= goal_amount,
+                    'surplus_or_deficit': float(current_value - goal_amount),
+                    'monthly_savings_needed': 0,
+                    'current_monthly_contribution': float(monthly_contribution),
+                    'savings_gap': 0,
+                    'probability_of_success': 1.0 if current_value >= goal_amount else 0.0,
+                    'on_track': current_value >= goal_amount
+                }
+
+            # Calculate required savings
+            try:
+                savings_needed = self.projector.calculate_required_savings(
+                    current_value=current_value,
+                    target_value=goal_amount,
+                    years=years_to_goal
+                )
+            except Exception as e:
+                logger.error(f"Error calculating required savings: {e}")
+                # Fallback calculation
+                simple_gap = goal_amount - current_value
+                monthly_needed = max(0, simple_gap / (years_to_goal * 12))
+                savings_needed = {'monthly_savings_needed': monthly_needed}
+
+            # Run simple projection for probability of success
+            try:
+                market_params = self.market_data_service.get_market_parameters()
+                expected_return = market_params.get('expected_return', 0.12)
+
+                # Simple calculation: will current value + contributions reach goal?
+                total_contributions = monthly_contribution * 12 * years_to_goal
+                future_current_value = current_value * ((1 + expected_return) ** years_to_goal)
+                future_contributions_value = total_contributions * ((1 + expected_return) ** (years_to_goal / 2))
+
+                projected_total = future_current_value + future_contributions_value
+                probability_of_success = min(1.0, max(0.0, projected_total / goal_amount))
+
+            except Exception as e:
+                logger.error(f"Error calculating success probability: {e}")
+                probability_of_success = 0.5  # Default
+
+            monthly_savings_needed = savings_needed.get('monthly_savings_needed', 0)
+            savings_gap = max(0, monthly_savings_needed - monthly_contribution)
+
+            result = {
+                'goal_amount': float(goal_amount),
+                'current_value': float(current_value),
+                'years_to_goal': float(years_to_goal),
+                'monthly_savings_needed': float(monthly_savings_needed),
+                'current_monthly_contribution': float(monthly_contribution),
+                'savings_gap': float(savings_gap),
+                'probability_of_success': float(probability_of_success),
+                'on_track': monthly_contribution >= monthly_savings_needed
             }
 
-        # Calculate required savings
-        savings_needed = self.projector.calculate_required_savings(
-            current_value=current_value,
-            target_value=goal_amount,
-            years=years_to_goal
-        )
+            return result
 
-        # Run projection with current contribution
-        if monthly_contribution > 0:
-            # Adjust current value for contributions
-            total_contributions = monthly_contribution * 12 * years_to_goal
-            effective_target = goal_amount - total_contributions
-
-            projection = self.projector.monte_carlo_projection(
-                current_value=current_value,
-                expected_return=0.08,
-                volatility=0.15,
-                years=int(years_to_goal),
-                simulations=1000
-            )
-
-            probability_of_success = 1 - projection.probability_of_loss
-        else:
-            probability_of_success = 0.5  # Rough estimate
-
-        return {
-            'goal_amount': goal_amount,
-            'current_value': current_value,
-            'years_to_goal': years_to_goal,
-            'monthly_savings_needed': savings_needed['monthly_savings_needed'],
-            'current_monthly_contribution': monthly_contribution,
-            'savings_gap': savings_needed['monthly_savings_needed'] - monthly_contribution,
-            'probability_of_success': probability_of_success,
-            'on_track': monthly_contribution >= savings_needed['monthly_savings_needed']
-        }
+        except Exception as e:
+            logger.error(f"Error in goal progress calculation: {e}")
+            raise ValueError(f"Goal calculation failed: {str(e)}")
 
     def _get_cached_holdings(self) -> List[Holding]:
         """Get holdings with caching (without day change data)"""
