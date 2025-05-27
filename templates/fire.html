@@ -63,28 +63,28 @@
       <h5 class="card-title">
         <i class="fas fa-calculator me-2"></i>FIRE Parameters
       </h5>
-      <form method="GET" action="{{ url_for('fire_calculator') }}" class="needs-validation">
+      <form method="GET" action="{{ url_for('fire_calculator') }}" class="needs-validation" novalidate>
         <div class="row g-3">
           <div class="col-md-6">
-            <label class="form-label fw-semibold">Annual Expenses (₹)</label>
-            <input type="number" name="expenses" class="form-control"
+            <label for="expenses" class="form-label fw-semibold">Annual Expenses (₹)</label>
+            <input type="number" name="expenses" id="expenses" class="form-control"
                    value="{{ annual_expenses }}" min="100000" step="50000" required>
             <small class="text-muted">Your yearly spending in retirement</small>
           </div>
           <div class="col-md-6">
-            <label class="form-label fw-semibold">Current Age</label>
-            <input type="number" name="current_age" class="form-control"
+            <label for="current-age" class="form-label fw-semibold">Current Age</label>
+            <input type="number" name="current_age" id="current-age" class="form-control"
                    value="{{ current_age }}" min="18" max="70" required>
           </div>
           <div class="col-md-6">
-            <label class="form-label fw-semibold">Target Retirement Age</label>
-            <input type="number" name="retirement_age" class="form-control"
+            <label for="retirement-age" class="form-label fw-semibold">Target Retirement Age</label>
+            <input type="number" name="retirement_age" id="retirement-age" class="form-control"
                    value="{{ retirement_age }}" min="{{ current_age + 1 }}" max="80" required>
             <small class="text-muted">{{ fire.years_to_retirement }} years from now</small>
           </div>
           <div class="col-md-6">
-            <label class="form-label fw-semibold">Life Expectancy</label>
-            <input type="number" name="life_expectancy" class="form-control"
+            <label for="life-expectancy" class="form-label fw-semibold">Life Expectancy</label>
+            <input type="number" name="life_expectancy" id="life-expectancy" class="form-control"
                    value="{{ life_expectancy }}" min="{{ retirement_age + 10 }}" max="120" required>
             <small class="text-muted">{{ fire.retirement_years }} years in retirement</small>
           </div>
@@ -153,11 +153,11 @@
         <table class="table table-hover">
           <thead>
           <tr>
-            <th>Monthly Savings</th>
-            <th>Total Saved</th>
-            <th>Years to FIRE</th>
-            <th>Portfolio at Retirement</th>
-            <th>Status</th>
+            <th scope="col">Monthly Savings</th>
+            <th scope="col">Total Saved</th>
+            <th scope="col">Years to FIRE</th>
+            <th scope="col">Portfolio at Retirement</th>
+            <th scope="col">Status</th>
           </tr>
           </thead>
           <tbody>

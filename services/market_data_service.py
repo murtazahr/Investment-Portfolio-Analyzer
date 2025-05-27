@@ -50,15 +50,10 @@ class MarketDataService:
             # Get benchmark historical data
             end_date = datetime.now()
 
-            # Try different time periods for robustness
+            # Try different time periods for robustness (limited to 10 years max due to Upstox limitation)
             parameters = {}
 
-            # Calculate 20-year parameters (if available)
-            twenty_year_params = self._calculate_historical_parameters(
-                end_date - timedelta(days=365 * 20), end_date, "20-year"
-            )
-
-            # Calculate 10-year parameters
+            # Calculate 10-year parameters (maximum available from Upstox)
             ten_year_params = self._calculate_historical_parameters(
                 end_date - timedelta(days=365 * 10), end_date, "10-year"
             )
@@ -74,10 +69,7 @@ class MarketDataService:
             )
 
             # Use the longest available period with valid data
-            if twenty_year_params:
-                parameters = twenty_year_params
-                logger.info("Using 20-year historical parameters")
-            elif ten_year_params:
+            if ten_year_params:
                 parameters = ten_year_params
                 logger.info("Using 10-year historical parameters")
             elif five_year_params:
@@ -113,11 +105,17 @@ class MarketDataService:
     ) -> Optional[Dict[str, float]]:
         """
         Calculate market parameters from historical data
-        
+
         Returns:
             Dictionary with calculated parameters or None if insufficient data
         """
         try:
+            # Ensure we don't go back more than 10 years due to Upstox limitation
+            max_start_date = datetime.now() - timedelta(days=365 * 10)
+            if start_date < max_start_date:
+                start_date = max_start_date
+                logger.warning(f"Adjusted start date to {start_date.date()} due to Upstox 10-year data limitation")
+
             # Get benchmark (Nifty 50) historical data
             benchmark_data = self.upstox_service.get_benchmark_data(start_date, end_date)
 
@@ -181,7 +179,7 @@ class MarketDataService:
     def _get_current_market_conditions() -> Dict[str, float]:
         """
         Get current market conditions (risk-free rate, inflation)
-        
+
         For now, returns sensible defaults for India
         In production, could integrate with RBI API or other data sources
         """
@@ -194,7 +192,7 @@ class MarketDataService:
     def _get_fallback_parameters() -> Dict[str, float]:
         """
         Get fallback parameters when historical data is not available
-        
+
         Conservative estimates based on Indian market characteristics
         """
         return {
@@ -209,14 +207,20 @@ class MarketDataService:
     def get_volatility_index_stats(self, days_back: int = 365) -> Dict[str, float]:
         """
         Get India VIX statistics from actual data
-        
+
         Args:
-            days_back: Number of days of historical VIX data to analyze
-            
+            days_back: Number of days of historical VIX data to analyze (max 10 years)
+
         Returns:
             Dictionary with VIX statistics
         """
         try:
+            # Limit to 10 years max due to Upstox limitation
+            max_days = 365 * 10
+            if days_back > max_days:
+                days_back = max_days
+                logger.warning(f"Limited VIX data request to {max_days} days due to Upstox limitation")
+
             # India VIX instrument token on NSE
             vix_instrument_token = "NSE_INDEX|India VIX"
 
@@ -276,7 +280,7 @@ class MarketDataService:
     def get_scenario_parameters(self) -> Dict[str, Dict[str, float]]:
         """
         Get scenario analysis parameters based on historical data and current VIX
-        
+
         Returns:
             Dictionary of scenarios with their parameters
         """
@@ -380,16 +384,23 @@ class MarketDataService:
     ) -> pd.DataFrame:
         """
         Calculate rolling statistics for different time windows
-        
+
         Args:
-            window_years: Rolling window in years
-            
+            window_years: Rolling window in years (max 10 due to Upstox limitation)
+
         Returns:
             DataFrame with rolling statistics
         """
         try:
+            # Limit to 10 years max due to Upstox limitation
+            max_years = 10
+            total_years = window_years + 5  # Extra data for rolling
+            if total_years > max_years:
+                total_years = max_years
+                logger.warning(f"Limited rolling statistics to {max_years} years due to Upstox limitation")
+
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=365 * (window_years + 5))  # Extra data for rolling
+            start_date = end_date - timedelta(days=365 * total_years)
 
             benchmark_data = self.upstox_service.get_benchmark_data(start_date, end_date)
 
@@ -440,7 +451,7 @@ class MarketDataService:
             risk_level = "Very High"
 
         # Calculate VIX percentile rank (where current VIX stands historically)
-        historical_vix = self.get_volatility_index_stats(days_back=365 * 3)  # 3 years
+        historical_vix = self.get_volatility_index_stats(days_back=365 * 3)  # 3 years max
 
         return {
             'current_vix': current_vix,

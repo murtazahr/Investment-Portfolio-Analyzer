@@ -604,217 +604,337 @@ def create_app(config_name=None):
                                    message=f"Error calculating goal progress: {str(e)}")
 
     def _create_projection_chart(projections):
-        """Create projection distribution visualization"""
-
-        import plotly.graph_objs as go
-        import plotly.io as pio
+        """Create projection distribution visualization with improved readability"""
 
         # Create histogram of final values
         fig = go.Figure()
 
-        # Add histogram
+        # Add histogram with better binning
         fig.add_trace(go.Histogram(
             x=projections.final_values,
-            nbinsx=50,
+            nbinsx=40,  # Reduced bins for cleaner look
             name='Projected Values',
-            marker_color='rgba(102, 126, 234, 0.6)',
-            hovertemplate='<b>Portfolio Value</b>: ₹%{x:,.0f}<br><b>Count</b>: %{y}<extra></extra>'
+            marker_color='rgba(102, 126, 234, 0.7)',
+            marker_line=dict(color='rgba(102, 126, 234, 1)', width=1),
+            hovertemplate='<b>Portfolio Value Range</b>: ₹%{x:,.0f}<br><b>Frequency</b>: %{y}<br><extra></extra>'
         ))
 
-        # Add percentile lines with annotations
-        percentile_info = [
-            (5, 'red', '5th percentile (Worst case)'),
-            (25, 'orange', '25th percentile'),
-            (50, 'green', '50th percentile (Expected)'),
-            (75, 'orange', '75th percentile'),
-            (95, 'red', '95th percentile (Best case)')
-        ]
+        # Add percentile lines with better positioning and colors
+        percentile_colors = {
+            5: '#dc3545',    # Red for worst case
+            25: '#fd7e14',   # Orange
+            50: '#28a745',   # Green for expected
+            75: '#fd7e14',   # Orange
+            95: '#6f42c1'    # Purple for best case
+        }
 
-        for percentile, color, label in percentile_info:
+        percentile_labels = {
+            5: 'Worst Case (5%)',
+            25: '25th Percentile',
+            50: 'Expected (50%)',
+            75: '75th Percentile',
+            95: 'Best Case (95%)'
+        }
+
+        # Calculate chart bounds for better annotation positioning
+        x_min, x_max = projections.final_values.min(), projections.final_values.max()
+        x_range = x_max - x_min
+
+        for percentile in [5, 25, 50, 75, 95]:
             value = projections.percentiles[percentile]
+            color = percentile_colors[percentile]
+            label = percentile_labels[percentile]
+
+            # Position annotations to avoid overlap
+            if percentile <= 25:
+                annotation_position = "top left"
+                x_shift = -20
+            elif percentile >= 75:
+                annotation_position = "top right"
+                x_shift = 20
+            else:
+                annotation_position = "top center"
+                x_shift = 0
+
             fig.add_vline(
                 x=value,
                 line_dash="dash",
                 line_color=color,
-                annotation_text=f"{label}<br>₹{value:,.0f}",
-                annotation_position="top right" if percentile > 50 else "top left"
+                line_width=2,
+                annotation_text=f"<b>{label}</b><br>₹{value:,.0f}",
+                annotation_position=annotation_position,
+                annotation_font_size=10,
+                annotation_font_color=color,
+                annotation_bordercolor=color,
+                annotation_borderwidth=1,
+                annotation_bgcolor="rgba(255,255,255,0.8)"
             )
 
-        # Calculate some statistics for the title
+        # Calculate statistics for subtitle
         expected_annual_return = projections.expected_return * 100
+        current_value = projections.initial_value
 
         fig.update_layout(
             title={
-                'text': f'Portfolio Value Distribution after {projections.projection_years} Years<br>' +
-                        f'<sub>Expected Annual Return: {expected_annual_return:.1f}% | ' +
+                'text': f'Portfolio Projection Distribution - {projections.projection_years} Year Outlook<br>' +
+                        f'<sub style="font-size: 12px;">Starting Value: ₹{current_value:,.0f} | ' +
+                        f'Expected Annual Return: {expected_annual_return:.1f}% | ' +
                         f'Risk of Loss: {projections.probability_of_loss*100:.1f}%</sub>',
                 'x': 0.5,
-                'xanchor': 'center'
+                'xanchor': 'center',
+                'font': {'size': 16}
             },
             xaxis_title='Portfolio Value (₹)',
-            yaxis_title='Frequency',
+            yaxis_title='Number of Simulations',
             showlegend=False,
-            height=500,
+            height=550,  # Increased height for better readability
             template='plotly_white',
-            hovermode='x'
+            hovermode='x',
+            margin=dict(t=80, b=60, l=60, r=60)  # Better margins
         )
 
-        # Format x-axis for Indian currency
-        fig.update_xaxis(
+        # Format x-axis with better scaling
+        fig.update_xaxes(
             tickformat=',.0f',
-            tickprefix='₹'
+            tickprefix='₹',
+            tickangle=45,  # Angle ticks to prevent overlap
+            nticks=8  # Limit number of ticks
+        )
+
+        # Format y-axis
+        fig.update_yaxes(
+            tickformat=',d'
         )
 
         return pio.to_html(fig, full_html=False)
 
-    def _create_scenario_chart(scenarios):
-        """Create scenario analysis visualization"""
 
-        import plotly.graph_objs as go
-        import plotly.io as pio
+    def _create_scenario_chart(scenarios):
+        """Create scenario analysis visualization with improved readability"""
+
+        from plotly.subplots import make_subplots
 
         # Prepare data
         scenario_names = [s.name for s in scenarios]
         projected_values = [s.projected_value for s in scenarios]
         probabilities_of_loss = [s.probability_of_loss * 100 for s in scenarios]
 
-        # Create figure with secondary y-axis
-        fig = go.Figure()
+        # Create figure with secondary y-axis and better spacing
+        fig = make_subplots(
+            specs=[[{"secondary_y": True}]],
+            subplot_titles=("Market Scenario Analysis",)
+        )
 
-        # Add bar chart for projected values
-        fig.add_trace(go.Bar(
-            name='Projected Value',
-            x=scenario_names,
-            y=projected_values,
-            text=[f'₹{v:,.0f}' for v in projected_values],
-            textposition='outside',
-            marker_color=['#28a745', '#17a2b8', '#ffc107', '#dc3545'],
-            hovertemplate='<b>%{x}</b><br>Projected Value: ₹%{y:,.0f}<extra></extra>'
-        ))
+        # Add bar chart for projected values with better colors
+        colors = ['#198754', '#0dcaf0', '#ffc107', '#dc3545']  # Green, Cyan, Yellow, Red
 
-        # Add line chart for probability of loss
-        fig.add_trace(go.Scatter(
-            name='Risk of Loss',
-            x=scenario_names,
-            y=probabilities_of_loss,
-            mode='lines+markers+text',
-            text=[f'{p:.1f}%' for p in probabilities_of_loss],
-            textposition='top center',
-            line=dict(color='red', width=3),
-            marker=dict(size=10),
-            yaxis='y2',
-            hovertemplate='<b>%{x}</b><br>Risk of Loss: %{y:.1f}%<extra></extra>'
-        ))
-
-        # Update layout
-        fig.update_layout(
-            title='Scenario Analysis: Projected Portfolio Values',
-            xaxis_title='Market Scenario',
-            yaxis_title='Projected Portfolio Value (₹)',
-            yaxis2=dict(
-                title='Probability of Loss (%)',
-                overlaying='y',
-                side='right',
-                range=[0, max(probabilities_of_loss) * 1.2]
+        fig.add_trace(
+            go.Bar(
+                name='Projected Portfolio Value',
+                x=scenario_names,
+                y=projected_values,
+                text=[f'₹{v/1000000:.1f}M' if v >= 1000000 else f'₹{v/100000:.1f}L' for v in projected_values],
+                textposition='outside',
+                textfont=dict(size=11, color='black'),
+                marker_color=colors,
+                marker_line=dict(color='white', width=1),
+                hovertemplate='<b>%{x}</b><br>Projected Value: ₹%{y:,.0f}<br><extra></extra>',
+                width=0.6  # Narrower bars for better appearance
             ),
-            height=400,
+            secondary_y=False,
+        )
+
+        # Add line chart for probability of loss with better styling
+        fig.add_trace(
+            go.Scatter(
+                name='Risk of Loss (%)',
+                x=scenario_names,
+                y=probabilities_of_loss,
+                mode='lines+markers+text',
+                text=[f'{p:.0f}%' for p in probabilities_of_loss],
+                textposition='top center',
+                textfont=dict(size=11, color='#dc3545'),
+                line=dict(color='#dc3545', width=4),
+                marker=dict(
+                    size=12,
+                    color='#dc3545',
+                    line=dict(color='white', width=2)
+                ),
+                hovertemplate='<b>%{x}</b><br>Risk of Loss: %{y:.1f}%<br><extra></extra>'
+            ),
+            secondary_y=True,
+        )
+
+        # Update layout with better spacing and fonts
+        fig.update_layout(
+            height=450,  # Increased height
             template='plotly_white',
-            hovermode='x',
+            hovermode='x unified',
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
+                y=1.05,
+                xanchor="center",
+                x=0.5,
+                font=dict(size=12)
+            ),
+            margin=dict(t=100, b=80, l=80, r=80),  # Better margins
+            font=dict(size=12)
         )
 
-        # Format y-axis
-        fig.update_yaxes(tickformat=',.0f', tickprefix='₹', secondary_y=False)
-        fig.update_yaxes(tickformat='.1f', ticksuffix='%', secondary_y=True)
+        # Set y-axes titles with better formatting
+        fig.update_yaxes(
+            title_text="<b>Projected Portfolio Value (₹)</b>",
+            secondary_y=False,
+            tickformat=',.0f',
+            title_font=dict(size=14)
+        )
+        fig.update_yaxes(
+            title_text="<b>Probability of Loss (%)</b>",
+            secondary_y=True,
+            tickformat='.0f',
+            ticksuffix='%',
+            title_font=dict(size=14),
+            range=[0, max(probabilities_of_loss) * 1.2]  # Better range for readability
+        )
+
+        # Format x-axis
+        fig.update_xaxes(
+            title_text="<b>Market Scenario</b>",
+            title_font=dict(size=14),
+            tickfont=dict(size=12)
+        )
 
         return pio.to_html(fig, full_html=False)
 
-    def _create_fire_progress_chart(fire_results):
-        """Create FIRE progress visualization"""
 
-        import plotly.graph_objs as go
-        import plotly.io as pio
+    def _create_fire_progress_chart(fire_results):
+        """Create FIRE progress visualization with improved readability"""
 
         # Create gauge chart for progress
         current_value = fire_results['current_portfolio_value']
         fire_number = fire_results['fire_number']
         progress_percentage = min(100, (current_value / fire_number) * 100)
 
+        # Format values for display
+        current_display = f"₹{current_value/1000000:.1f}M" if current_value >= 1000000 else f"₹{current_value/100000:.1f}L"
+        target_display = f"₹{fire_number/1000000:.1f}M" if fire_number >= 1000000 else f"₹{fire_number/100000:.1f}L"
+
         fig = go.Figure(go.Indicator(
             mode="gauge+number+delta",
             value=progress_percentage,
-            title={'text': f"Progress to FIRE<br><sub>Current: ₹{current_value:,.0f} | Target: ₹{fire_number:,.0f}</sub>"},
-            delta={'reference': 25, 'increasing': {'color': "green"}},
+            number={'suffix': '%', 'font': {'size': 36}},
+            title={
+                'text': f"<b>Progress to Financial Independence</b><br>" +
+                        f"<span style='font-size: 14px; color: #666;'>Current: {current_display} | " +
+                        f"Target: {target_display}</span>",
+                'font': {'size': 18}
+            },
+            delta={
+                'reference': 0,
+                'increasing': {'color': "#28a745"},
+                'decreasing': {'color': "#dc3545"},
+                'suffix': '%',
+                'font': {'size': 16}
+            },
             gauge={
-                'axis': {'range': [None, 100], 'ticksuffix': '%'},
-                'bar': {'color': "darkblue"},
+                'axis': {
+                    'range': [None, 100],
+                    'tickwidth': 1,
+                    'tickcolor': "darkblue",
+                    'ticksuffix': '%',
+                    'tickfont': {'size': 12}
+                },
+                'bar': {'color': "#0d6efd", 'thickness': 0.3},
+                'bgcolor': "white",
+                'borderwidth': 2,
+                'bordercolor': "gray",
                 'steps': [
-                    {'range': [0, 25], 'color': "lightgray"},
-                    {'range': [25, 50], 'color': "gray"},
-                    {'range': [50, 75], 'color': "lightgreen"},
-                    {'range': [75, 100], 'color': "green"}
+                    {'range': [0, 25], 'color': "#f8f9fa"},
+                    {'range': [25, 50], 'color': "#e9ecef"},
+                    {'range': [50, 75], 'color': "#d4edda"},
+                    {'range': [75, 100], 'color': "#d1ecf1"}
                 ],
                 'threshold': {
-                    'line': {'color': "red", 'width': 4},
+                    'line': {'color': "#28a745", 'width': 4},
                     'thickness': 0.75,
-                    'value': 90
+                    'value': progress_percentage
                 }
             }
         ))
 
         fig.update_layout(
-            height=400,
-            font={'size': 16}
+            height=450,
+            font={'size': 14},
+            margin=dict(t=80, b=40, l=40, r=40)
         )
 
         return pio.to_html(fig, full_html=False)
 
+
     def _create_performance_chart(portfolio_metrics, benchmark_metrics):
-        """Create performance comparison chart"""
+        """Create performance comparison chart with improved readability"""
         fig = go.Figure()
 
-        # Portfolio line
+        # Portfolio line with better styling
         fig.add_trace(go.Scatter(
             x=portfolio_metrics.cumulative_returns.index,
             y=portfolio_metrics.cumulative_returns * 100,
             mode='lines',
             name='Your Portfolio',
-            line=dict(width=3, color='#667eea'),
-            hovertemplate='<b>Portfolio</b><br>Date: %{x}<br>Cumulative Return: %{y:.2f}%<extra></extra>'
+            line=dict(width=4, color='#0d6efd'),
+            hovertemplate='<b>Your Portfolio</b><br>Date: %{x}<br>Return: %{y:.2f}%<extra></extra>'
         ))
 
-        # Benchmark line
+        # Benchmark line with contrasting style
         if benchmark_metrics:
             fig.add_trace(go.Scatter(
                 x=benchmark_metrics.cumulative_returns.index,
                 y=benchmark_metrics.cumulative_returns * 100,
                 mode='lines',
-                name='Nifty 50 (Benchmark)',
-                line=dict(dash='dot', width=2, color='#f5576c'),
-                hovertemplate='<b>Nifty 50</b><br>Date: %{x}<br>Cumulative Return: %{y:.2f}%<extra></extra>'
+                name='Nifty 50 Benchmark',
+                line=dict(dash='dot', width=3, color='#dc3545'),
+                hovertemplate='<b>Nifty 50</b><br>Date: %{x}<br>Return: %{y:.2f}%<extra></extra>'
             ))
 
         fig.update_layout(
-            title='Cumulative Returns: Portfolio vs Benchmark',
-            xaxis_title='Date',
-            yaxis_title='Cumulative Return (%)',
+            title={
+                'text': '<b>Portfolio Performance vs Benchmark</b><br><sub>Cumulative Returns Comparison</sub>',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 18}
+            },
+            xaxis_title='<b>Date</b>',
+            yaxis_title='<b>Cumulative Return (%)</b>',
             template='plotly_white',
             hovermode='x unified',
-            height=500,
+            height=550,
             font=dict(size=12),
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
                 y=1.02,
-                xanchor="right",
-                x=1
-            )
+                xanchor="center",
+                x=0.5,
+                font=dict(size=14),
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="rgba(0,0,0,0.2)",
+                borderwidth=1
+            ),
+            margin=dict(t=100, b=60, l=60, r=60)
+        )
+
+        # Format axes
+        fig.update_xaxes(
+            tickfont=dict(size=11),
+            title_font=dict(size=14)
+        )
+        fig.update_yaxes(
+            tickformat='.1f',
+            ticksuffix='%',
+            tickfont=dict(size=11),
+            title_font=dict(size=14),
+            gridcolor='rgba(0,0,0,0.1)'
         )
 
         return pio.to_html(fig, full_html=False)

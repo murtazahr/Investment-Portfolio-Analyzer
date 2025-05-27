@@ -38,6 +38,54 @@
   </div>
   {% endif %}
 
+  <!-- Portfolio Analysis Insights -->
+  {% if portfolio_insights %}
+  <div class="card mb-4 border-info">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="fas fa-search me-2"></i>Portfolio Analysis Insights
+      </h5>
+      <div class="row">
+        <div class="col-md-3">
+          <div class="text-center">
+            <h4 class="text-info">{{ portfolio_insights.holdings_count }}</h4>
+            <small class="text-muted">Holdings</small>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-center">
+            <h4 class="{% if portfolio_insights.concentration_risk == 'High' %}text-danger{% elif portfolio_insights.concentration_risk == 'Moderate' %}text-warning{% else %}text-success{% endif %}">
+              {{ portfolio_insights.concentration_risk }}
+            </h4>
+            <small class="text-muted">Concentration Risk</small>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-center">
+            <h4 class="text-primary">{{ portfolio_insights.sector_count }}</h4>
+            <small class="text-muted">Sectors</small>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-center">
+            <h4 class="{% if portfolio_insights.largest_holding_pct > 25 %}text-warning{% else %}text-success{% endif %}">
+              {{ "%.0f"|format(portfolio_insights.largest_holding_pct) }}%
+            </h4>
+            <small class="text-muted">Largest Holding</small>
+          </div>
+        </div>
+      </div>
+      <div class="mt-3">
+        <small class="text-muted">
+          <i class="fas fa-info-circle me-1"></i>
+          <strong>{{ portfolio_insights.method_description }}</strong> -
+          This projection considers your specific holdings, their correlations, and concentration levels for more accurate risk assessment.
+        </small>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Current Status -->
   <div class="row mb-4">
     <div class="col-md-3 mb-3">
@@ -89,35 +137,40 @@
       <h5 class="card-title">
         <i class="fas fa-cog me-2"></i>Projection Parameters
       </h5>
-      <form method="GET" action="{{ url_for('projections') }}" class="needs-validation">
+      <form method="GET" action="{{ url_for('projections') }}" class="needs-validation" novalidate>
         <div class="row g-3">
           <div class="col-md-3">
-            <label class="form-label fw-semibold">Time Horizon</label>
-            <select name="years" class="form-select" onchange="this.form.submit()">
-              <option value="1" {% if years == 1 %}selected{% endif %}>1 Year</option>
-              <option value="3" {% if years == 3 %}selected{% endif %}>3 Years</option>
-              <option value="5" {% if years == 5 %}selected{% endif %}>5 Years</option>
-              <option value="10" {% if years == 10 %}selected{% endif %}>10 Years</option>
-              <option value="15" {% if years == 15 %}selected{% endif %}>15 Years</option>
-              <option value="20" {% if years == 20 %}selected{% endif %}>20 Years</option>
-              <option value="30" {% if years == 30 %}selected{% endif %}>30 Years</option>
+            <label for="years-select" class="form-label fw-semibold">Time Horizon</label>
+            <select name="years" id="years-select" class="form-select" onchange="this.form.submit()">
+              <option value="1"{% if years == 1 %} selected{% endif %}>1 Year</option>
+              <option value="3"{% if years == 3 %} selected{% endif %}>3 Years</option>
+              <option value="5"{% if years == 5 %} selected{% endif %}>5 Years</option>
+              <option value="10"{% if years == 10 %} selected{% endif %}>10 Years</option>
+              <option value="15"{% if years == 15 %} selected{% endif %}>15 Years</option>
+              <option value="20"{% if years == 20 %} selected{% endif %}>20 Years</option>
+              <option value="30"{% if years == 30 %} selected{% endif %}>30 Years</option>
             </select>
           </div>
           <div class="col-md-3">
-            <label class="form-label fw-semibold">Simulations</label>
-            <select name="simulations" class="form-select" onchange="this.form.submit()">
-              <option value="1000" {% if simulations == 1000 %}selected{% endif %}>1,000 (Fast)</option>
-              <option value="10000" {% if simulations == 10000 %}selected{% endif %}>10,000 (Standard)</option>
-              <option value="50000" {% if simulations == 50000 %}selected{% endif %}>50,000 (Detailed)</option>
-              <option value="100000" {% if simulations == 100000 %}selected{% endif %}>100,000 (Maximum)</option>
+            <label for="simulations-select" class="form-label fw-semibold">Simulations</label>
+            <select name="simulations" id="simulations-select" class="form-select" onchange="this.form.submit()">
+              <option value="1000"{% if simulations == 1000 %} selected{% endif %}>1,000 (Fast)</option>
+              <option value="10000"{% if simulations == 10000 %} selected{% endif %}>10,000 (Standard)</option>
+              <option value="50000"{% if simulations == 50000 %} selected{% endif %}>50,000 (Detailed)</option>
+              <option value="100000"{% if simulations == 100000 %} selected{% endif %}>100,000 (Maximum)</option>
             </select>
           </div>
           <div class="col-md-3">
-            <label class="form-label fw-semibold">Method</label>
-            <select name="method" class="form-select" onchange="this.form.submit()">
-              <option value="parametric" {% if method == 'parametric' %}selected{% endif %}>Parametric (Normal Distribution)</option>
-              <option value="historical" {% if method == 'historical' %}selected{% endif %}>Historical (Bootstrap)</option>
+            <label for="method-select" class="form-label fw-semibold">Method</label>
+            <select name="method" id="method-select" class="form-select" onchange="this.form.submit()">
+              <option value="portfolio_aware"{% if method == 'portfolio_aware' %} selected{% endif %}>Portfolio-Aware (Recommended)</option>
+              <option value="correlated"{% if method == 'correlated' %} selected{% endif %}>Correlation-Aware</option>
+              <option value="historical"{% if method == 'historical' %} selected{% endif %}>Historical Bootstrap</option>
+              <option value="parametric"{% if method == 'parametric' %} selected{% endif %}>Market-Based</option>
             </select>
+            {% if portfolio_insights %}
+            <small class="text-muted">{{ portfolio_insights.method_description }}</small>
+            {% endif %}
           </div>
           <div class="col-md-3">
             <label class="form-label">&nbsp;</label>
@@ -133,9 +186,16 @@
       <div class="mt-3">
         <small class="text-muted">
           <i class="fas fa-info-circle me-1"></i>
+          {% if method == 'portfolio_aware' or method == 'correlated' %}
+          Using portfolio-specific parameters calculated from your holdings:
+          Expected Return {{ "%.1f"|format(projections.expected_return * 100) }}% |
+          Volatility {{ "%.1f"|format(market_params.volatility * 100) }}% (market baseline) |
+          Based on {{ "%.1f"|format(market_params.get('period_years', 0)) }} years of data
+          {% else %}
           Using market parameters: Expected Return {{ "%.1f"|format(market_params.expected_return * 100) }}% |
           Volatility {{ "%.1f"|format(market_params.volatility * 100) }}% |
           Based on {{ "%.1f"|format(market_params.get('period_years', 0)) }} years of data
+          {% endif %}
           {% if market_params.get('vix_adjusted') %}(VIX-adjusted){% endif %}
         </small>
       </div>
@@ -155,10 +215,10 @@
             <table class="table table-hover">
               <thead>
               <tr>
-                <th>Percentile</th>
-                <th>Portfolio Value</th>
-                <th>Total Return</th>
-                <th>Annual Return</th>
+                <th scope="col">Percentile</th>
+                <th scope="col">Portfolio Value</th>
+                <th scope="col">Total Return</th>
+                <th scope="col">Annual Return</th>
               </tr>
               </thead>
               <tbody>
@@ -214,9 +274,9 @@
 
             <dt class="col-sm-6">Probability of Loss</dt>
             <dd class="col-sm-6">
-                            <span class="{% if projections.probability_of_loss > 0.2 %}text-danger{% else %}text-success{% endif %}">
-                                {{ format_percentage(projections.probability_of_loss * 100) }}
-                            </span>
+              <span class="{% if projections.probability_of_loss > 0.2 %}text-danger{% else %}text-success{% endif %}">
+                {{ format_percentage(projections.probability_of_loss * 100) }}
+              </span>
             </dd>
 
             <dt class="col-sm-6">Maximum Potential Loss</dt>

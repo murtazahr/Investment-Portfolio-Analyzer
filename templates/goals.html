@@ -73,7 +73,8 @@
                style="width: {{ progress_percent }}%"
                aria-valuenow="{{ goal.current_value }}"
                aria-valuemin="0"
-               aria-valuemax="{{ goal.goal_amount }}">
+               aria-valuemax="{{ goal.goal_amount }}"
+               aria-label="Goal progress: {{ progress_percent }}%">
             {{ format_currency(goal.current_value) }}
           </div>
         </div>
@@ -91,7 +92,7 @@
             <dd class="col-sm-6">{{ format_currency(goal.monthly_savings_needed) }}</dd>
 
             <dt class="col-sm-6">Savings Gap</dt>
-            <dd class="col-sm-6" class="{% if goal.savings_gap > 0 %}text-danger{% else %}text-success{% endif %}">
+            <dd class="col-sm-6 {% if goal.savings_gap > 0 %}text-danger{% else %}text-success{% endif %}">
               {{ format_currency(abs(goal.savings_gap)) }}
               {% if goal.savings_gap <= 0 %}
               <small class="text-success">(Surplus)</small>
@@ -102,9 +103,9 @@
 
             <dt class="col-sm-6">Success Probability</dt>
             <dd class="col-sm-6">
-                            <span class="{% if goal.probability_of_success > 0.8 %}text-success{% elif goal.probability_of_success > 0.6 %}text-warning{% else %}text-danger{% endif %}">
-                                {{ format_percentage(goal.probability_of_success * 100) }}
-                            </span>
+              <span class="{% if goal.probability_of_success > 0.8 %}text-success{% elif goal.probability_of_success > 0.6 %}text-warning{% else %}text-danger{% endif %}">
+                {{ format_percentage(goal.probability_of_success * 100) }}
+              </span>
             </dd>
           </dl>
         </div>
@@ -142,23 +143,23 @@
       <h5 class="card-title">
         <i class="fas fa-calculator me-2"></i>Goal Calculator
       </h5>
-      <form method="GET" action="{{ url_for('goals') }}" class="needs-validation">
+      <form method="GET" action="{{ url_for('goals') }}" class="needs-validation" novalidate>
         <div class="row g-3">
           <div class="col-md-4">
-            <label class="form-label fw-semibold">Goal Amount (₹)</label>
-            <input type="number" name="goal_amount" class="form-control"
+            <label for="goal-amount" class="form-label fw-semibold">Goal Amount (₹)</label>
+            <input type="number" name="goal_amount" id="goal-amount" class="form-control"
                    value="{{ goal_amount }}" min="100000" step="100000" required>
             <small class="text-muted">Target amount you want to achieve</small>
           </div>
           <div class="col-md-4">
-            <label class="form-label fw-semibold">Time Frame (Years)</label>
-            <input type="number" name="goal_years" class="form-control"
+            <label for="goal-years" class="form-label fw-semibold">Time Frame (Years)</label>
+            <input type="number" name="goal_years" id="goal-years" class="form-control"
                    value="{{ goal_years }}" min="1" max="40" step="1" required>
             <small class="text-muted">Years to achieve your goal</small>
           </div>
           <div class="col-md-4">
-            <label class="form-label fw-semibold">Monthly Contribution (₹)</label>
-            <input type="number" name="monthly_contribution" class="form-control"
+            <label for="monthly-contribution" class="form-label fw-semibold">Monthly Contribution (₹)</label>
+            <input type="number" name="monthly_contribution" id="monthly-contribution" class="form-control"
                    value="{{ monthly_contribution }}" min="0" step="1000" required>
             <small class="text-muted">Amount you can save monthly</small>
           </div>
@@ -184,11 +185,11 @@
         <table class="table table-hover">
           <thead>
           <tr>
-            <th>Monthly Savings</th>
-            <th>Total Contribution</th>
-            <th>Expected Final Value</th>
-            <th>Goal Achievement</th>
-            <th>Status</th>
+            <th scope="col">Monthly Savings</th>
+            <th scope="col">Total Contribution</th>
+            <th scope="col">Expected Final Value</th>
+            <th scope="col">Goal Achievement</th>
+            <th scope="col">Status</th>
           </tr>
           </thead>
           <tbody>
@@ -214,7 +215,12 @@
             <td>
               <div class="progress" style="min-width: 100px;">
                 <div class="progress-bar {% if future_value >= goal.goal_amount %}bg-success{% else %}bg-warning{% endif %}"
-                     style="width: {{ achievement_percent }}%">
+                     style="width: {{ achievement_percent }}%"
+                     role="progressbar"
+                     aria-valuenow="{{ achievement_percent }}"
+                     aria-valuemin="0"
+                     aria-valuemax="100"
+                     aria-label="Achievement percentage: {{ achievement_percent }}%">
                   {{ format_percentage(achievement_percent) }}
                 </div>
               </div>
@@ -268,13 +274,13 @@
         </h6>
         <p class="mb-0">
           To get back on track, consider:
+        </p>
         <ul class="mb-0">
           <li>Increasing monthly savings by ₹{{ "{:,.0f}".format(goal.savings_gap) }}</li>
           <li>Extending your goal timeline by {{ "%.1f"|format(goal.savings_gap / goal.current_monthly_contribution / 12) }} years</li>
           <li>Finding additional income sources</li>
           <li>Reviewing your investment strategy for better returns</li>
         </ul>
-        </p>
       </div>
       {% endif %}
     </div>
