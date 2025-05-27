@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container my-4">
+  <h2 class="mb-4 text-center">
+    <i class="fas fa-chart-line me-2"></i>Portfolio Projections
+  </h2>
+
+  <!-- Market Conditions Card -->
+  {% if market_sentiment %}
+  <div class="card mb-4 {% if market_sentiment.risk_level == 'Very High' %}border-danger{% elif market_sentiment.risk_level == 'High' %}border-warning{% else %}border-success{% endif %}">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="fas fa-thermometer-half me-2"></i>Current Market Conditions
+      </h5>
+      <div class="row">
+        <div class="col-md-3">
+          <div class="text-center">
+            <h3 class="{% if market_sentiment.current_vix > 30 %}text-danger{% elif market_sentiment.current_vix > 20 %}text-warning{% else %}text-success{% endif %}">
+              {{ "%.1f"|format(market_sentiment.current_vix) }}
+            </h3>
+            <small class="text-muted">India VIX</small>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-center">
+            <h3>{{ market_sentiment.risk_level }}</h3>
+            <small class="text-muted">Risk Level</small>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <p class="mb-1"><strong>{{ market_sentiment.sentiment }}</strong></p>
+          <p class="mb-0 text-muted">{{ market_sentiment.recommendation }}</p>
+          <small class="text-muted">VIX Percentile: {{ "%.0f"|format(market_sentiment.vix_percentile) }}%</small>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Current Status -->
+  <div class="row mb-4">
+    <div class="col-md-3 mb-3">
+      <div class="card metrics-card">
+        <div class="card-body text-center">
+          <div class="metric-label">Current Value</div>
+          <div class="metric-value text-primary">
+            {{ format_currency(portfolio.total_value) }}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card metrics-card">
+        <div class="card-body text-center">
+          <div class="metric-label">Expected Value ({{ years }}Y)</div>
+          <div class="metric-value text-success">
+            {{ format_currency(projections.percentiles[50]) }}
+          </div>
+          <small class="text-muted">50th percentile</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card metrics-card">
+        <div class="card-body text-center">
+          <div class="metric-label">Expected Annual Return</div>
+          <div class="metric-value">
+            {{ format_percentage(projections.expected_return * 100) }}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card metrics-card">
+        <div class="card-body text-center">
+          <div class="metric-label">Risk of Loss</div>
+          <div class="metric-value {% if projections.probability_of_loss > 0.2 %}text-danger{% else %}text-success{% endif %}">
+            {{ format_percentage(projections.probability_of_loss * 100) }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Projection Parameters -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="fas fa-cog me-2"></i>Projection Parameters
+      </h5>
+      <form method="GET" action="{{ url_for('projections') }}" class="needs-validation">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Time Horizon</label>
+            <select name="years" class="form-select" onchange="this.form.submit()">
+              <option value="1" {% if years == 1 %}selected{% endif %}>1 Year</option>
+              <option value="3" {% if years == 3 %}selected{% endif %}>3 Years</option>
+              <option value="5" {% if years == 5 %}selected{% endif %}>5 Years</option>
+              <option value="10" {% if years == 10 %}selected{% endif %}>10 Years</option>
+              <option value="15" {% if years == 15 %}selected{% endif %}>15 Years</option>
+              <option value="20" {% if years == 20 %}selected{% endif %}>20 Years</option>
+              <option value="30" {% if years == 30 %}selected{% endif %}>30 Years</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Simulations</label>
+            <select name="simulations" class="form-select" onchange="this.form.submit()">
+              <option value="1000" {% if simulations == 1000 %}selected{% endif %}>1,000 (Fast)</option>
+              <option value="10000" {% if simulations == 10000 %}selected{% endif %}>10,000 (Standard)</option>
+              <option value="50000" {% if simulations == 50000 %}selected{% endif %}>50,000 (Detailed)</option>
+              <option value="100000" {% if simulations == 100000 %}selected{% endif %}>100,000 (Maximum)</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Method</label>
+            <select name="method" class="form-select" onchange="this.form.submit()">
+              <option value="parametric" {% if method == 'parametric' %}selected{% endif %}>Parametric (Normal Distribution)</option>
+              <option value="historical" {% if method == 'historical' %}selected{% endif %}>Historical (Bootstrap)</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">&nbsp;</label>
+            <button type="submit" class="btn btn-primary d-block w-100">
+              <i class="fas fa-calculator me-2"></i>Recalculate
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- Market Parameters Display -->
+      {% if market_params %}
+      <div class="mt-3">
+        <small class="text-muted">
+          <i class="fas fa-info-circle me-1"></i>
+          Using market parameters: Expected Return {{ "%.1f"|format(market_params.expected_return * 100) }}% |
+          Volatility {{ "%.1f"|format(market_params.volatility * 100) }}% |
+          Based on {{ "%.1f"|format(market_params.get('period_years', 0)) }} years of data
+          {% if market_params.get('vix_adjusted') %}(VIX-adjusted){% endif %}
+        </small>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Projection Results Table -->
+  <div class="row mb-4">
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title">
+            <i class="fas fa-table me-2"></i>Projection Results
+          </h5>
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+              <tr>
+                <th>Percentile</th>
+                <th>Portfolio Value</th>
+                <th>Total Return</th>
+                <th>Annual Return</th>
+              </tr>
+              </thead>
+              <tbody>
+              <tr class="table-danger">
+                <td><strong>5th</strong> <small class="text-muted">(Worst case)</small></td>
+                <td>{{ format_currency(projections.percentiles[5]) }}</td>
+                <td>{{ format_percentage(((projections.percentiles[5] / portfolio.total_value) - 1) * 100) }}</td>
+                <td>{{ format_percentage((((projections.percentiles[5] / portfolio.total_value) ** (1/years)) - 1) * 100) }}</td>
+              </tr>
+              <tr>
+                <td><strong>25th</strong></td>
+                <td>{{ format_currency(projections.percentiles[25]) }}</td>
+                <td>{{ format_percentage(((projections.percentiles[25] / portfolio.total_value) - 1) * 100) }}</td>
+                <td>{{ format_percentage((((projections.percentiles[25] / portfolio.total_value) ** (1/years)) - 1) * 100) }}</td>
+              </tr>
+              <tr class="table-success">
+                <td><strong>50th</strong> <small class="text-muted">(Expected)</small></td>
+                <td>{{ format_currency(projections.percentiles[50]) }}</td>
+                <td>{{ format_percentage(((projections.percentiles[50] / portfolio.total_value) - 1) * 100) }}</td>
+                <td>{{ format_percentage((((projections.percentiles[50] / portfolio.total_value) ** (1/years)) - 1) * 100) }}</td>
+              </tr>
+              <tr>
+                <td><strong>75th</strong></td>
+                <td>{{ format_currency(projections.percentiles[75]) }}</td>
+                <td>{{ format_percentage(((projections.percentiles[75] / portfolio.total_value) - 1) * 100) }}</td>
+                <td>{{ format_percentage((((projections.percentiles[75] / portfolio.total_value) ** (1/years)) - 1) * 100) }}</td>
+              </tr>
+              <tr class="table-primary">
+                <td><strong>95th</strong> <small class="text-muted">(Best case)</small></td>
+                <td>{{ format_currency(projections.percentiles[95]) }}</td>
+                <td>{{ format_percentage(((projections.percentiles[95] / portfolio.total_value) - 1) * 100) }}</td>
+                <td>{{ format_percentage((((projections.percentiles[95] / portfolio.total_value) ** (1/years)) - 1) * 100) }}</td>
+              </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title">
+            <i class="fas fa-shield-alt me-2"></i>Risk Analysis
+          </h5>
+          <dl class="row">
+            <dt class="col-sm-6">Value at Risk (95%)</dt>
+            <dd class="col-sm-6">{{ format_currency(projections.var_95) }}</dd>
+
+            <dt class="col-sm-6">Conditional VaR</dt>
+            <dd class="col-sm-6">{{ format_currency(projections.cvar_95) }}</dd>
+
+            <dt class="col-sm-6">Probability of Loss</dt>
+            <dd class="col-sm-6">
+                            <span class="{% if projections.probability_of_loss > 0.2 %}text-danger{% else %}text-success{% endif %}">
+                                {{ format_percentage(projections.probability_of_loss * 100) }}
+                            </span>
+            </dd>
+
+            <dt class="col-sm-6">Maximum Potential Loss</dt>
+            <dd class="col-sm-6">{{ format_currency(portfolio.total_value - projections.var_95) }}</dd>
+          </dl>
+
+          <div class="alert alert-info mt-3">
+            <h6 class="alert-heading">
+              <i class="fas fa-info-circle me-2"></i>How to Interpret
+            </h6>
+            <ul class="mb-0 small">
+              <li><strong>VaR:</strong> There's a 95% chance your portfolio won't lose more than ₹{{ "{:,.0f}".format(portfolio.total_value - projections.var_95) }}</li>
+              <li><strong>CVaR:</strong> If losses exceed VaR, the average loss would be ₹{{ "{:,.0f}".format(portfolio.total_value - projections.cvar_95) }}</li>
+              <li><strong>50th Percentile:</strong> You have a 50% chance of exceeding ₹{{ "{:,.0f}".format(projections.percentiles[50]) }}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Distribution Chart -->
+  <div class="chart-container mb-4">
+    <h5 class="text-center mb-3">
+      <i class="fas fa-chart-area me-2"></i>Distribution of Possible Outcomes
+    </h5>
+    {{ projection_chart|safe }}
+  </div>
+
+  <!-- Scenario Analysis -->
+  {% if scenarios %}
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="fas fa-random me-2"></i>Scenario Analysis
+      </h5>
+      <p class="text-muted">How your portfolio might perform under different market conditions</p>
+      {{ scenario_chart|safe }}
+
+      <div class="row mt-4">
+        {% for scenario in scenarios %}
+        <div class="col-md-3 mb-3">
+          <div class="card h-100 {% if 'Bull' in scenario.name %}border-success{% elif 'Bear' in scenario.name %}border-warning{% elif 'Crash' in scenario.name %}border-danger{% else %}border-info{% endif %}">
+            <div class="card-header">
+              <strong>{{ scenario.name }}</strong>
+            </div>
+            <div class="card-body">
+              <p class="small text-muted">{{ scenario.description }}</p>
+              <dl class="mb-0">
+                <dt>Expected Return</dt>
+                <dd>{{ format_percentage(scenario.expected_return * 100) }} annually</dd>
+                <dt>Risk Level</dt>
+                <dd>{{ format_percentage(scenario.expected_volatility * 100) }} volatility</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Action Buttons -->
+  <div class="text-center mt-4">
+    <a href="{{ url_for('fire_calculator') }}" class="btn btn-success me-2">
+      <i class="fas fa-fire me-2"></i>FIRE Calculator
+    </a>
+    <a href="{{ url_for('goals') }}" class="btn btn-info me-2">
+      <i class="fas fa-bullseye me-2"></i>Set Goals
+    </a>
+    <a href="{{ url_for('home') }}" class="btn btn-outline-secondary me-2">
+      <i class="fas fa-home me-2"></i>Dashboard
+    </a>
+    <a href="{{ url_for('portfolio') }}" class="btn btn-outline-primary">
+      <i class="fas fa-chart-line me-2"></i>Historical Performance
+    </a>
+  </div>
+</div>
+
+<style>
+  .metrics-card {
+    transition: transform 0.2s;
+  }
+  .metrics-card:hover {
+    transform: translateY(-5px);
+  }
+
+  .card-header {
+    font-weight: 600;
+  }
+
+  .table-hover tbody tr:hover {
+    background-color: rgba(0,0,0,0.02);
+  }
+
+  dl dt {
+    font-weight: 600;
+  }
+
+  dl dd {
+    margin-bottom: 0.5rem;
+  }
+
+  .chart-container {
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    padding: 2rem;
+  }
+
+  .alert-info {
+    background-color: #e7f3ff;
+    border-color: #b3d7ff;
+  }
+
+  .border-success {
+    border-width: 2px !important;
+  }
+
+  .border-warning {
+    border-width: 2px !important;
+  }
+
+  .border-danger {
+    border-width: 2px !important;
+  }
+
+  .border-info {
+    border-width: 2px !important;
+  }
+</style>
+{% endblock %}

@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container my-4">
+  <h2 class="mb-4 text-center">
+    <i class="fas fa-fire me-2"></i>FIRE Calculator
+    <br>
+    <small class="text-muted">Financial Independence, Retire Early</small>
+  </h2>
+
+  <!-- Current Status Cards -->
+  <div class="row mb-4">
+    <div class="col-md-3 mb-3">
+      <div class="card metrics-card">
+        <div class="card-body text-center">
+          <div class="metric-label">Current Portfolio</div>
+          <div class="metric-value text-primary">
+            {{ format_currency(fire.current_portfolio_value) }}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card metrics-card">
+        <div class="card-body text-center">
+          <div class="metric-label">FIRE Number</div>
+          <div class="metric-value text-warning">
+            {{ format_currency(fire.fire_number) }}
+          </div>
+          <small class="text-muted">At {{ format_percentage(fire.withdrawal_rate * 100) }} SWR</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card metrics-card">
+        <div class="card-body text-center">
+          <div class="metric-label">Gap to FIRE</div>
+          <div class="metric-value {% if fire.gap_to_fire > 0 %}text-danger{% else %}text-success{% endif %}">
+            {{ format_currency(abs(fire.gap_to_fire)) }}
+          </div>
+          <small class="{% if fire.on_track %}text-success{% else %}text-danger{% endif %}">
+            {% if fire.on_track %}On Track{% else %}Behind Schedule{% endif %}
+          </small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card metrics-card">
+        <div class="card-body text-center">
+          <div class="metric-label">Monthly Savings Needed</div>
+          <div class="metric-value text-info">
+            {{ format_currency(fire.monthly_savings_needed) }}
+          </div>
+          <small class="text-muted">To reach FIRE</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FIRE Parameters -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="fas fa-calculator me-2"></i>FIRE Parameters
+      </h5>
+      <form method="GET" action="{{ url_for('fire_calculator') }}" class="needs-validation">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Annual Expenses (₹)</label>
+            <input type="number" name="expenses" class="form-control"
+                   value="{{ annual_expenses }}" min="100000" step="50000" required>
+            <small class="text-muted">Your yearly spending in retirement</small>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Current Age</label>
+            <input type="number" name="current_age" class="form-control"
+                   value="{{ current_age }}" min="18" max="70" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Target Retirement Age</label>
+            <input type="number" name="retirement_age" class="form-control"
+                   value="{{ retirement_age }}" min="{{ current_age + 1 }}" max="80" required>
+            <small class="text-muted">{{ fire.years_to_retirement }} years from now</small>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Life Expectancy</label>
+            <input type="number" name="life_expectancy" class="form-control"
+                   value="{{ life_expectancy }}" min="{{ retirement_age + 10 }}" max="120" required>
+            <small class="text-muted">{{ fire.retirement_years }} years in retirement</small>
+          </div>
+        </div>
+        <div class="mt-3">
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-calculator me-2"></i>Calculate FIRE
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- FIRE Progress Visualization -->
+  <div class="row mb-4">
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title">
+            <i class="fas fa-tachometer-alt me-2"></i>Progress to FIRE
+          </h5>
+          {{ fire_chart|safe }}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title">
+            <i class="fas fa-info-circle me-2"></i>FIRE Breakdown
+          </h5>
+          <dl class="row">
+            <dt class="col-sm-7">Annual Expenses Today</dt>
+            <dd class="col-sm-5">{{ format_currency(fire.annual_expenses_today) }}</dd>
+
+            <dt class="col-sm-7">Annual Expenses at Retirement</dt>
+            <dd class="col-sm-5">{{ format_currency(fire.annual_expenses_at_retirement) }}</dd>
+
+            <dt class="col-sm-7">Total Retirement Needs</dt>
+            <dd class="col-sm-5">{{ format_currency(fire.total_retirement_needs) }}</dd>
+
+            <dt class="col-sm-7">Safe Withdrawal Rate</dt>
+            <dd class="col-sm-5">{{ format_percentage(fire.withdrawal_rate * 100) }}</dd>
+
+            <dt class="col-sm-7">Years to Retirement</dt>
+            <dd class="col-sm-5">{{ fire.years_to_retirement }} years</dd>
+
+            <dt class="col-sm-7">Years in Retirement</dt>
+            <dd class="col-sm-5">{{ fire.retirement_years }} years</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Savings Scenarios -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="fas fa-piggy-bank me-2"></i>Savings Scenarios
+      </h5>
+      <p class="text-muted">How different monthly savings amounts affect your FIRE timeline</p>
+
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+          <tr>
+            <th>Monthly Savings</th>
+            <th>Total Saved</th>
+            <th>Years to FIRE</th>
+            <th>Portfolio at Retirement</th>
+            <th>Status</th>
+          </tr>
+          </thead>
+          <tbody>
+          {% set savings_scenarios = [
+          fire.monthly_savings_needed * 0.5,
+          fire.monthly_savings_needed * 0.75,
+          fire.monthly_savings_needed,
+          fire.monthly_savings_needed * 1.25,
+          fire.monthly_savings_needed * 1.5
+          ] %}
+          {% for savings in savings_scenarios %}
+          <tr {% if savings == fire.monthly_savings_needed %}class="table-success"{% endif %}>
+            <td>{{ format_currency(savings) }}</td>
+            <td>{{ format_currency(savings * 12 * fire.years_to_retirement) }}</td>
+            <td>{{ fire.years_to_retirement }}</td>
+            <td>
+              {% set future_value = fire.current_portfolio_value * (1.08 ** fire.years_to_retirement) +
+              (savings * 12 * ((1.08 ** fire.years_to_retirement - 1) / 0.08)) %}
+              {{ format_currency(future_value) }}
+            </td>
+            <td>
+              {% if future_value >= fire.fire_number %}
+              <span class="badge bg-success">Achievable</span>
+              {% else %}
+              <span class="badge bg-danger">Short by {{ format_currency(fire.fire_number - future_value) }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- FIRE Tips -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="fas fa-lightbulb me-2"></i>Tips to Reach FIRE Faster
+      </h5>
+      <div class="row">
+        <div class="col-md-6">
+          <h6>Increase Income</h6>
+          <ul>
+            <li>Negotiate salary increases</li>
+            <li>Develop high-income skills</li>
+            <li>Start a side business</li>
+            <li>Invest in income-generating assets</li>
+          </ul>
+        </div>
+        <div class="col-md-6">
+          <h6>Reduce Expenses</h6>
+          <ul>
+            <li>Track and optimize spending</li>
+            <li>House hack or downsize</li>
+            <li>Eliminate high-interest debt</li>
+            <li>Practice mindful consumption</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="text-center">
+    <a href="{{ url_for('projections') }}" class="btn btn-primary me-2">
+      <i class="fas fa-chart-line me-2"></i>View Projections
+    </a>
+    <a href="{{ url_for('goals') }}" class="btn btn-success me-2">
+      <i class="fas fa-bullseye me-2"></i>Set Goals
+    </a>
+    <a href="{{ url_for('home') }}" class="btn btn-outline-secondary">
+      <i class="fas fa-home me-2"></i>Dashboard
+    </a>
+  </div>
+</div>
+
+<style>
+  .metrics-card {
+    transition: all 0.3s ease;
+  }
+
+  .metrics-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+  }
+
+  .badge {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+  }
+</style>
+{% endblock %}

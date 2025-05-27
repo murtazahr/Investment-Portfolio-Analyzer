@@ -31,6 +31,20 @@
         </div>
       </div>
     </div>
+    <div class="col-md-6 mb-4">
+      <div class="card dashboard-card h-100">
+        <div class="card-body text-center p-4">
+          <div class="card-icon performance-icon">
+            <i class="fas fa-rocket"></i>
+          </div>
+          <h4 class="card-title">Future Projections</h4>
+          <p class="card-text text-muted">Monte Carlo simulations, scenario analysis, and FIRE calculations</p>
+          <a href="{{ url_for('projections') }}" class="btn btn-primary">
+            <i class="fas fa-chart-line me-2"></i>View Projections
+          </a>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

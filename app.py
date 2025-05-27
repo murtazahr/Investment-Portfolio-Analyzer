@@ -418,6 +418,363 @@ def create_app(config_name=None):
         except Exception as e:
             return f"Debug error: {str(e)}", 500
 
+    @app.route('/projections')
+    @login_required
+    def projections():
+        """Portfolio projections page with Monte Carlo simulation"""
+
+        # Get projection parameters from request
+        years = int(request.args.get('years', 5))
+        simulations = int(request.args.get('simulations', 10000))
+        method = request.args.get('method', 'parametric')
+
+        # Validate parameters
+        years = max(1, min(30, years))  # Between 1 and 30 years
+        simulations = max(1000, min(100000, simulations))  # Between 1k and 100k
+
+        try:
+            # Get projections
+            projection_results = portfolio_service.get_portfolio_projections(
+                years=years,
+                simulations=simulations,
+                method=method,
+                use_historical=(method == 'historical')
+            )
+
+            # Get scenario analysis
+            scenarios = portfolio_service.get_scenario_analysis(years=years)
+
+            # Get market parameters and VIX data
+            market_params = portfolio_service.market_data_service.get_market_parameters()
+            vix_stats = portfolio_service.market_data_service.get_volatility_index_stats()
+            market_sentiment = portfolio_service.market_data_service.get_current_market_sentiment()
+
+            # Create visualizations
+            projection_chart = _create_projection_chart(projection_results)
+            scenario_chart = _create_scenario_chart(scenarios)
+
+            # Get current portfolio summary for context
+            portfolio_summary = portfolio_service.get_portfolio_summary()
+
+            return render_template(
+                'projections.html',
+                projections=projection_results,
+                scenarios=scenarios,
+                portfolio=portfolio_summary,
+                market_params=market_params,
+                vix_stats=vix_stats,
+                market_sentiment=market_sentiment,
+                projection_chart=projection_chart,
+                scenario_chart=scenario_chart,
+                years=years,
+                simulations=simulations,
+                method=method
+            )
+
+        except ValueError as e:
+            app.logger.error(f"Validation error in projections: {str(e)}")
+            return render_template('no_data.html',
+                                   start_date=datetime.now().date(),
+                                   end_date=datetime.now().date(),
+                                   message=str(e))
+        except Exception as e:
+            app.logger.error(f"Error in projections: {str(e)}")
+            return render_template('no_data.html',
+                                   start_date=datetime.now().date(),
+                                   end_date=datetime.now().date(),
+                                   message=f"Error generating projections: {str(e)}")
+
+    @app.route('/api/market_data')
+    @login_required
+    def api_market_data():
+        """API endpoint to get current market parameters"""
+        try:
+            market_params = portfolio_service.market_data_service.get_market_parameters()
+            vix_stats = portfolio_service.market_data_service.get_volatility_index_stats()
+            sentiment = portfolio_service.market_data_service.get_current_market_sentiment()
+
+            return jsonify({
+                'status': 'success',
+                'market_parameters': {
+                    'expected_return': market_params.get('expected_return', 0),
+                    'volatility': market_params.get('volatility', 0),
+                    'sharpe_ratio': market_params.get('sharpe_ratio', 0),
+                    'data_source': f"{market_params.get('period_years', 0):.1f} years of data"
+                },
+                'vix_data': {
+                    'current': vix_stats.get('current_vix', 0),
+                    'average': vix_stats.get('average_vix', 0),
+                    'min': vix_stats.get('min_vix', 0),
+                    'max': vix_stats.get('max_vix', 0)
+                },
+                'market_sentiment': sentiment,
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
+        except Exception as e:
+            app.logger.error(f"Error getting market data: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), 500
+
+    @app.route('/fire')
+    @login_required
+    def fire_calculator():
+        """FIRE (Financial Independence Retire Early) calculator page"""
+
+        # Get parameters
+        annual_expenses = float(request.args.get('expenses', 500000))  # Default 5 lakhs
+        current_age = int(request.args.get('current_age', 30))
+        retirement_age = int(request.args.get('retirement_age', 45))
+        life_expectancy = int(request.args.get('life_expectancy', 90))
+
+        try:
+            # Get FIRE projections
+            fire_results = portfolio_service.get_fire_projections(
+                annual_expenses=annual_expenses,
+                current_age=current_age,
+                retirement_age=retirement_age,
+                life_expectancy=life_expectancy
+            )
+
+            # Create visualization
+            fire_chart = _create_fire_progress_chart(fire_results)
+
+            # Get portfolio summary
+            portfolio_summary = portfolio_service.get_portfolio_summary()
+
+            return render_template(
+                'fire.html',
+                fire=fire_results,
+                portfolio=portfolio_summary,
+                fire_chart=fire_chart,
+                annual_expenses=annual_expenses,
+                current_age=current_age,
+                retirement_age=retirement_age,
+                life_expectancy=life_expectancy
+            )
+
+        except Exception as e:
+            app.logger.error(f"Error in FIRE calculator: {str(e)}")
+            return f"Error calculating FIRE projections: {str(e)}", 500
+
+    @app.route('/goals')
+    @login_required
+    def goals():
+        """Financial goals tracking page"""
+
+        # Get parameters from request with defaults
+        goal_amount = float(request.args.get('goal_amount', 10000000))  # Default: 1 crore
+        goal_years = int(request.args.get('goal_years', 10))           # Default: 10 years
+        monthly_contribution = float(request.args.get('monthly_contribution', 50000))  # Default: 50k/month
+
+        # Validate inputs
+        goal_amount = max(100000, goal_amount)  # Minimum 1 lakh
+        goal_years = max(1, min(40, goal_years))  # Between 1-40 years
+        monthly_contribution = max(0, monthly_contribution)
+
+        # Calculate goal date
+        goal_date = datetime.now() + timedelta(days=goal_years * 365)
+
+        try:
+            # Calculate goal progress
+            goal_progress = portfolio_service.calculate_goal_progress(
+                goal_amount=goal_amount,
+                goal_date=goal_date,
+                monthly_contribution=monthly_contribution
+            )
+
+            # Get portfolio summary for context
+            portfolio_summary = portfolio_service.get_portfolio_summary()
+
+            return render_template(
+                'goals.html',
+                goal=goal_progress,
+                portfolio=portfolio_summary,
+                goal_amount=goal_amount,
+                goal_years=goal_years,
+                monthly_contribution=monthly_contribution
+            )
+
+        except Exception as e:
+            app.logger.error(f"Error in goals: {str(e)}")
+            return render_template('no_data.html',
+                                   start_date=datetime.now().date(),
+                                   end_date=datetime.now().date(),
+                                   message=f"Error calculating goal progress: {str(e)}")
+
+    def _create_projection_chart(projections):
+        """Create projection distribution visualization"""
+
+        import plotly.graph_objs as go
+        import plotly.io as pio
+
+        # Create histogram of final values
+        fig = go.Figure()
+
+        # Add histogram
+        fig.add_trace(go.Histogram(
+            x=projections.final_values,
+            nbinsx=50,
+            name='Projected Values',
+            marker_color='rgba(102, 126, 234, 0.6)',
+            hovertemplate='<b>Portfolio Value</b>: ₹%{x:,.0f}<br><b>Count</b>: %{y}<extra></extra>'
+        ))
+
+        # Add percentile lines with annotations
+        percentile_info = [
+            (5, 'red', '5th percentile (Worst case)'),
+            (25, 'orange', '25th percentile'),
+            (50, 'green', '50th percentile (Expected)'),
+            (75, 'orange', '75th percentile'),
+            (95, 'red', '95th percentile (Best case)')
+        ]
+
+        for percentile, color, label in percentile_info:
+            value = projections.percentiles[percentile]
+            fig.add_vline(
+                x=value,
+                line_dash="dash",
+                line_color=color,
+                annotation_text=f"{label}<br>₹{value:,.0f}",
+                annotation_position="top right" if percentile > 50 else "top left"
+            )
+
+        # Calculate some statistics for the title
+        expected_annual_return = projections.expected_return * 100
+
+        fig.update_layout(
+            title={
+                'text': f'Portfolio Value Distribution after {projections.projection_years} Years<br>' +
+                        f'<sub>Expected Annual Return: {expected_annual_return:.1f}% | ' +
+                        f'Risk of Loss: {projections.probability_of_loss*100:.1f}%</sub>',
+                'x': 0.5,
+                'xanchor': 'center'
+            },
+            xaxis_title='Portfolio Value (₹)',
+            yaxis_title='Frequency',
+            showlegend=False,
+            height=500,
+            template='plotly_white',
+            hovermode='x'
+        )
+
+        # Format x-axis for Indian currency
+        fig.update_xaxis(
+            tickformat=',.0f',
+            tickprefix='₹'
+        )
+
+        return pio.to_html(fig, full_html=False)
+
+    def _create_scenario_chart(scenarios):
+        """Create scenario analysis visualization"""
+
+        import plotly.graph_objs as go
+        import plotly.io as pio
+
+        # Prepare data
+        scenario_names = [s.name for s in scenarios]
+        projected_values = [s.projected_value for s in scenarios]
+        probabilities_of_loss = [s.probability_of_loss * 100 for s in scenarios]
+
+        # Create figure with secondary y-axis
+        fig = go.Figure()
+
+        # Add bar chart for projected values
+        fig.add_trace(go.Bar(
+            name='Projected Value',
+            x=scenario_names,
+            y=projected_values,
+            text=[f'₹{v:,.0f}' for v in projected_values],
+            textposition='outside',
+            marker_color=['#28a745', '#17a2b8', '#ffc107', '#dc3545'],
+            hovertemplate='<b>%{x}</b><br>Projected Value: ₹%{y:,.0f}<extra></extra>'
+        ))
+
+        # Add line chart for probability of loss
+        fig.add_trace(go.Scatter(
+            name='Risk of Loss',
+            x=scenario_names,
+            y=probabilities_of_loss,
+            mode='lines+markers+text',
+            text=[f'{p:.1f}%' for p in probabilities_of_loss],
+            textposition='top center',
+            line=dict(color='red', width=3),
+            marker=dict(size=10),
+            yaxis='y2',
+            hovertemplate='<b>%{x}</b><br>Risk of Loss: %{y:.1f}%<extra></extra>'
+        ))
+
+        # Update layout
+        fig.update_layout(
+            title='Scenario Analysis: Projected Portfolio Values',
+            xaxis_title='Market Scenario',
+            yaxis_title='Projected Portfolio Value (₹)',
+            yaxis2=dict(
+                title='Probability of Loss (%)',
+                overlaying='y',
+                side='right',
+                range=[0, max(probabilities_of_loss) * 1.2]
+            ),
+            height=400,
+            template='plotly_white',
+            hovermode='x',
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        # Format y-axis
+        fig.update_yaxes(tickformat=',.0f', tickprefix='₹', secondary_y=False)
+        fig.update_yaxes(tickformat='.1f', ticksuffix='%', secondary_y=True)
+
+        return pio.to_html(fig, full_html=False)
+
+    def _create_fire_progress_chart(fire_results):
+        """Create FIRE progress visualization"""
+
+        import plotly.graph_objs as go
+        import plotly.io as pio
+
+        # Create gauge chart for progress
+        current_value = fire_results['current_portfolio_value']
+        fire_number = fire_results['fire_number']
+        progress_percentage = min(100, (current_value / fire_number) * 100)
+
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=progress_percentage,
+            title={'text': f"Progress to FIRE<br><sub>Current: ₹{current_value:,.0f} | Target: ₹{fire_number:,.0f}</sub>"},
+            delta={'reference': 25, 'increasing': {'color': "green"}},
+            gauge={
+                'axis': {'range': [None, 100], 'ticksuffix': '%'},
+                'bar': {'color': "darkblue"},
+                'steps': [
+                    {'range': [0, 25], 'color': "lightgray"},
+                    {'range': [25, 50], 'color': "gray"},
+                    {'range': [50, 75], 'color': "lightgreen"},
+                    {'range': [75, 100], 'color': "green"}
+                ],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': 90
+                }
+            }
+        ))
+
+        fig.update_layout(
+            height=400,
+            font={'size': 16}
+        )
+
+        return pio.to_html(fig, full_html=False)
+
     def _create_performance_chart(portfolio_metrics, benchmark_metrics):
         """Create performance comparison chart"""
         fig = go.Figure()
