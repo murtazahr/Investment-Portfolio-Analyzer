@@ -566,51 +566,6 @@ def create_app(config_name=None):
             app.logger.error(f"Error in FIRE calculator: {str(e)}")
             return f"Error calculating FIRE projections: {str(e)}", 500
 
-    @app.route('/goals')
-    @login_required
-    def goals():
-        """Financial goals tracking page"""
-
-        # Get parameters from request with defaults
-        goal_amount = float(request.args.get('goal_amount', 10000000))  # Default: 1 crore
-        goal_years = int(request.args.get('goal_years', 10))           # Default: 10 years
-        monthly_contribution = float(request.args.get('monthly_contribution', 50000))  # Default: 50k/month
-
-        # Validate inputs
-        goal_amount = max(100000, goal_amount)  # Minimum 1 lakh
-        goal_years = max(1, min(40, goal_years))  # Between 1-40 years
-        monthly_contribution = max(0, monthly_contribution)
-
-        # Calculate goal date
-        goal_date = datetime.now() + timedelta(days=goal_years * 365)
-
-        try:
-            # Calculate goal progress
-            goal_progress = portfolio_service.calculate_goal_progress(
-                goal_amount=goal_amount,
-                goal_date=goal_date,
-                monthly_contribution=monthly_contribution
-            )
-
-            # Get portfolio summary for context
-            portfolio_summary = portfolio_service.get_portfolio_summary()
-
-            return render_template(
-                'goals.html',
-                goal=goal_progress,
-                portfolio=portfolio_summary,
-                goal_amount=goal_amount,
-                goal_years=goal_years,
-                monthly_contribution=monthly_contribution
-            )
-
-        except Exception as e:
-            app.logger.error(f"Error in goals: {str(e)}")
-            return render_template('no_data.html',
-                                   start_date=datetime.now().date(),
-                                   end_date=datetime.now().date(),
-                                   message=f"Error calculating goal progress: {str(e)}")
-
     def _create_projection_chart(projections):
         """Create projection distribution visualization with improved readability"""
 
@@ -915,17 +870,17 @@ def create_app(config_name=None):
             height=550,
             font=dict(size=12),
             legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="center",
-                x=0.5,
+                orientation="v",  # Changed to vertical
+                yanchor="top",
+                y=0.98,
+                xanchor="left",
+                x=1.02,  # Position to the right of the chart
                 font=dict(size=14),
-                bgcolor="rgba(255,255,255,0.8)",
+                bgcolor="rgba(255,255,255,0.9)",
                 bordercolor="rgba(0,0,0,0.2)",
                 borderwidth=1
             ),
-            margin=dict(t=100, b=60, l=60, r=60)
+            margin=dict(t=100, b=60, l=60, r=120)  # Increased right margin for legend space
         )
 
         # Format axes
